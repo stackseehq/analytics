@@ -2,6 +2,38 @@
 
 A highly typed, provider-agnostic analytics library for TypeScript applications. Works seamlessly on both client and server sides with full type safety for your custom events.
 
+## Table of Contents
+
+- [Features](#features)
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+  - [1. Define Your Events](#1-define-your-events)
+  - [2. Client-Side Usage](#2-client-side-usage)
+  - [3. Server-Side Usage](#3-server-side-usage)
+- [Async Tracking](#async-tracking-when-to-await-vs-fire-and-forget)
+  - [Fire-and-forget (Client-side typical usage)](#fire-and-forget-client-side-typical-usage)
+  - [Await for critical events (Server-side typical usage)](#await-for-critical-events-server-side-typical-usage)
+  - [Error handling](#error-handling)
+  - [Best practices](#best-practices)
+- [A complete example](#a-complete-example)
+- [Advanced Usage](#advanced-usage)
+  - [Creating a Typed Analytics Service](#creating-a-typed-analytics-service)
+  - [Event Categories](#event-categories)
+  - [Adding Custom Providers](#adding-custom-providers)
+  - [Client-Only and Server-Only Providers](#client-only-and-server-only-providers)
+  - [Using Multiple Providers](#using-multiple-providers)
+- [Server Deployments and waitUntil](#server-deployments-and-waituntil)
+  - [Vercel Functions](#vercel-functions)
+  - [Cloudflare Workers](#cloudflare-workers)
+  - [Netlify Functions](#netlify-functions)
+- [API Reference](#api-reference)
+  - [Client API](#client-api)
+  - [Server API](#server-api)
+  - [Type Helpers](#type-helpers)
+- [Best Practices](#best-practices)
+- [Contributing](#contributing)
+- [License](#license)
+
 ## Features
 
 - 🎯 **Type-safe events**: Define your own strongly typed events with full IntelliSense support
@@ -285,7 +317,7 @@ export const serverAnalytics = createServerAnalytics({
       host: PUBLIC_POSTHOG_HOST
     })
   ],
-  debug: process.env.NODE_ENV === 'development'
+  debug: import.meta.env.DEV
 });
 ```
 
