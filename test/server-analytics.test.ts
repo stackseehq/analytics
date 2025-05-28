@@ -43,8 +43,8 @@ describe("Server Analytics", () => {
 		expect(mockProvider.calls.initialize).toBe(1);
 	});
 
-	it("should track events with correct properties", () => {
-		analytics.track(TestEvents.userSignedUp.name, {
+	it("should track events with correct properties", async () => {
+		await analytics.track(TestEvents.userSignedUp.name, {
 			userId: "user-123",
 			email: "test@example.com",
 			plan: "pro",
@@ -61,8 +61,8 @@ describe("Server Analytics", () => {
 		});
 	});
 
-	it("should track events with user context", () => {
-		analytics.track(
+	it("should track events with user context", async () => {
+		await analytics.track(
 			TestEvents.featureUsed.name,
 			{
 				featureName: "export",
@@ -132,14 +132,14 @@ describe("Server Analytics", () => {
 		});
 	});
 
-	it("should handle multiple providers", () => {
+	it("should handle multiple providers", async () => {
 		const mockProvider2 = new MockAnalyticsProvider({ enabled: true });
 		const multiAnalytics = createServerAnalytics({
 			providers: [mockProvider, mockProvider2],
 			enabled: true,
 		});
 
-		multiAnalytics.track("test_event", { test: true });
+		await multiAnalytics.track("test_event", { test: true });
 
 		expect(mockProvider.calls.track).toHaveLength(1);
 		expect(mockProvider2.calls.track).toHaveLength(1);
@@ -157,15 +157,15 @@ describe("Server Analytics", () => {
 		expect(disabledProvider.calls.track).toHaveLength(0);
 	});
 
-	it("should extract category from event name", () => {
-		analytics.track("custom_action", { data: "test" });
+	it("should extract category from event name", async () => {
+		await analytics.track("custom_action", { data: "test" });
 
 		const trackedEvent = mockProvider.calls.track[0];
 		expect(trackedEvent.event.category).toBe("custom");
 	});
 
-	it("should use default category for events without underscore", () => {
-		analytics.track("singleword", { data: "test" });
+	it("should use default category for events without underscore", async () => {
+		await analytics.track("singleword", { data: "test" });
 
 		const trackedEvent = mockProvider.calls.track[0];
 		expect(trackedEvent.event.category).toBe("engagement");

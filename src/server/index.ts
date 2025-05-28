@@ -3,14 +3,14 @@ export {
 	createServerAnalytics,
 	ServerAnalytics,
 	type ServerAnalyticsConfig,
-} from "../server.js";
+} from "@/server.js";
 
 // Server-side providers
-export { PostHogServerProvider } from "../providers/posthog/server.js";
-export type { PostHogConfig } from "../providers/posthog/types.js";
+export { PostHogServerProvider } from "@/providers/posthog/server.js";
+export type { PostHogConfig } from "@/providers/posthog/types.js";
 
 // Base provider for creating custom providers
-export { BaseAnalyticsProvider } from "../providers/base.provider.js";
+export { BaseAnalyticsProvider } from "@/providers/base.provider.js";
 
 // Type exports
 export type {
@@ -19,7 +19,7 @@ export type {
 	EventContext,
 	AnalyticsProvider,
 	AnalyticsConfig,
-} from "../core/events/types.js";
+} from "@/core/events/types.js";
 
 export type {
 	CreateEventDefinition,
@@ -28,4 +28,4 @@ export type {
 	EventCollection,
 	AnyEventName,
 	AnyEventProperties,
-} from "../core/events/index.js";
+} from "@/core/events/index.js";

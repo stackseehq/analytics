@@ -73,13 +73,10 @@ describe("Client Analytics", () => {
 	});
 
 	it("should track events with browser context", async () => {
-		analytics.track(TestEvents.pageViewed.name, {
+		await analytics.track(TestEvents.pageViewed.name, {
 			path: "/dashboard",
 			title: "Dashboard",
 		});
-
-		// Wait for async initialization
-		await new Promise((resolve) => setTimeout(resolve, 10));
 
 		expect(mockProvider.calls.track).toHaveLength(1);
 		const trackedEvent = mockProvider.calls.track[0];
@@ -89,13 +86,10 @@ describe("Client Analytics", () => {
 	});
 
 	it("should generate session ID", async () => {
-		analytics.track(TestEvents.buttonClicked.name, {
+		await analytics.track(TestEvents.buttonClicked.name, {
 			buttonId: "submit-btn",
 			label: "Submit",
 		});
-
-		// Wait for async initialization
-		await new Promise((resolve) => setTimeout(resolve, 10));
 
 		const trackedEvent = mockProvider.calls.track[0];
 		expect(trackedEvent.event.sessionId).toBeDefined();
@@ -121,10 +115,7 @@ describe("Client Analytics", () => {
 		});
 
 		// Track event after identify
-		analytics.track("test_event", { test: true });
-
-		// Wait for async initialization
-		await new Promise((resolve) => setTimeout(resolve, 10));
+		await analytics.track("test_event", { test: true });
 
 		const trackedEvent = mockProvider.calls.track[0];
 		expect(trackedEvent.event.userId).toBe("user-123");
@@ -151,10 +142,7 @@ describe("Client Analytics", () => {
 		analytics.identify("user-123", { name: "Test" });
 
 		// Get initial session ID
-		analytics.track("before_reset", {});
-
-		// Wait for async initialization
-		await new Promise((resolve) => setTimeout(resolve, 10));
+		await analytics.track("before_reset", {});
 
 		const beforeReset = mockProvider.calls.track[0];
 		const initialSessionId = beforeReset.event.sessionId;
@@ -164,10 +152,7 @@ describe("Client Analytics", () => {
 		expect(mockProvider.calls.reset).toBe(1);
 
 		// Track after reset
-		analytics.track("after_reset", {});
-
-		// Wait for async initialization
-		await new Promise((resolve) => setTimeout(resolve, 10));
+		await analytics.track("after_reset", {});
 
 		const afterReset = mockProvider.calls.track[1];
 
@@ -185,10 +170,7 @@ describe("Client Analytics", () => {
 			},
 		});
 
-		analytics.track("test_event", {});
-
-		// Wait for async initialization
-		await new Promise((resolve) => setTimeout(resolve, 10));
+		await analytics.track("test_event", {});
 
 		const trackedEvent = mockProvider.calls.track[0];
 		expect(trackedEvent.context?.campaign).toEqual({
@@ -218,7 +200,7 @@ describe("Client Analytics", () => {
 		// Wait for initialization
 		await multiAnalytics.initialize();
 
-		multiAnalytics.track("test_event", { test: true });
+		await multiAnalytics.track("test_event", { test: true });
 
 		// Both providers should have track calls
 		expect(mockProvider1.calls.track).toHaveLength(1);
@@ -233,7 +215,7 @@ describe("Client Analytics", () => {
 		});
 
 		// Track without explicit initialization
-		uninitializedAnalytics.track("test_event", { data: "test" });
+		await uninitializedAnalytics.track("test_event", { data: "test" });
 
 		// Wait for auto-initialization
 		await new Promise((resolve) => setTimeout(resolve, 10));
@@ -249,10 +231,7 @@ describe("Client Analytics", () => {
 	});
 
 	it("should extract category from event name", async () => {
-		analytics.track("custom_action", { data: "test" });
-
-		// Wait for async initialization
-		await new Promise((resolve) => setTimeout(resolve, 10));
+		await analytics.track("custom_action", { data: "test" });
 
 		const trackedEvent = mockProvider.calls.track[0];
 		console.log("trackedEvent", trackedEvent);

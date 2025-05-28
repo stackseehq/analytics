@@ -85,11 +85,12 @@ export class BrowserAnalytics<
 		}
 	}
 
-	track(eventName: TEventName, properties: TEventProperties): void {
-		// Run initialization if needed, but don't block
-		this.ensureInitialized().catch((error) => {
-			console.error("[Analytics] Failed to initialize during track:", error);
-		});
+	async track(
+		eventName: TEventName,
+		properties: TEventProperties,
+	): Promise<void> {
+		// Ensure initialization but don't block the track call
+		await this.ensureInitialized();
 
 		const event: BaseEvent = {
 			action: eventName,
@@ -100,9 +101,21 @@ export class BrowserAnalytics<
 			sessionId: this.sessionId,
 		};
 
-		for (const provider of this.providers) {
-			provider.track(event, this.context);
-		}
+		// Track with all providers in parallel
+		const trackPromises = this.providers.map(async (provider) => {
+			try {
+				await provider.track(event, this.context);
+			} catch (error) {
+				// Log error but don't throw - one provider failing shouldn't break others
+				console.error(
+					`[Analytics] Provider ${provider.name} failed to track event:`,
+					error,
+				);
+			}
+		});
+
+		// Wait for all providers to complete
+		await Promise.all(trackPromises);
 	}
 
 	page(properties?: Record<string, unknown>): void {

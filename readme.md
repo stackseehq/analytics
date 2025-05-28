@@ -123,8 +123,8 @@ const analytics = createServerAnalytics({
   enabled: true
 });
 
-// Track events
-analytics.track(AppEvents.featureUsed.name, {
+// Track events - now returns a Promise
+await analytics.track(AppEvents.featureUsed.name, {
   featureName: 'export-data',
   userId: 'user-123',
   duration: 1500
@@ -141,6 +141,64 @@ analytics.track(AppEvents.featureUsed.name, {
 await analytics.shutdown();
 ```
 
+### Async Tracking: When to await vs fire-and-forget
+
+The `track()` method now returns a `Promise<void>`, giving you control over how to handle event tracking:
+
+#### Fire-and-forget (Client-side typical usage)
+```typescript
+// Don't await - let events send in the background
+analytics.track('button_clicked', {
+  buttonId: 'checkout',
+  label: 'Proceed to Checkout'
+});
+
+// User interaction continues immediately
+```
+
+#### Await for critical events (Server-side typical usage)
+```typescript
+// In serverless/edge functions, await to ensure events are sent
+export async function handler(req, res) {
+  try {
+    // Process the request...
+
+    // Await critical tracking to ensure it completes
+    await analytics.track('payment_processed', {
+      amount: 99.99,
+      currency: 'USD',
+      userId: req.userId
+    });
+
+    // Ensure all events are flushed before function ends
+    await analytics.shutdown();
+
+    return res.json({ success: true });
+  } catch (error) {
+    // Handle errors appropriately
+    console.error('Failed to track event:', error);
+    return res.status(500).json({ error: 'Internal error' });
+  }
+}
+```
+
+#### Error handling
+```typescript
+// The track method catches provider errors internally and logs them
+// It won't throw even if a provider fails, ensuring one provider's failure
+// doesn't affect others
+
+// If you need to know about failures, check your logs
+await analytics.track('important_event', { data: 'value' });
+// Even if one provider fails, others will still receive the event
+```
+
+#### Best practices:
+- **Client-side**: Usually fire-and-forget for better UX
+- **Server-side**: Usually await, especially in serverless environments
+- **Critical events**: Always await (e.g., payments, conversions)
+- **High-volume events**: Fire-and-forget to avoid blocking
+
 ### A complete example
 
 Here's a complete example using Svelte 5 that demonstrates both client and server-side analytics for a waitlist signup:
@@ -149,6 +207,7 @@ Here's a complete example using Svelte 5 that demonstrates both client and serve
 // src/lib/config/analytics.ts
 import { createClientAnalytics } from '@stacksee/analytics/client';
 import { PostHogClientProvider } from '@stacksee/analytics/providers/posthog';
+import { PUBLIC_POSTHOG_API_KEY, PUBLIC_POSTHOG_HOST } from '$env/static/public';
 
 // Define your events for the waitlist
 export const AppEvents = {
@@ -186,14 +245,14 @@ export const clientAnalytics = createClientAnalytics({
 // src/lib/server/analytics.ts
 import { createServerAnalytics } from '@stacksee/analytics/server';
 import { PostHogServerProvider } from '@stacksee/analytics/providers/posthog';
-import { AppEvents } from '../config/analytics'; // Import AppEvents
+import { AppEvents } from '$lib/config/analytics'; // Import AppEvents
+import { PUBLIC_POSTHOG_API_KEY, PUBLIC_POSTHOG_HOST } from '$env/static/public';
 
-// Server-side analytics instance
 export const serverAnalytics = createServerAnalytics({
   providers: [
     new PostHogServerProvider({
-      apiKey: process.env.POSTHOG_API_KEY, // Ensure POSTHOG_API_KEY is in your server environment
-      host: process.env.POSTHOG_HOST
+      apiKey: PUBLIC_POSTHOG_API_KEY,
+      host: PUBLIC_POSTHOG_HOST
     })
   ],
   debug: process.env.NODE_ENV === 'development'
@@ -237,7 +296,6 @@ export const serverAnalytics = createServerAnalytics({
       }
 
       message = 'Successfully joined the waitlist! We will notify you once you are approved.';
-      // Optionally, redirect or clear form: email = '';
     } catch (error) {
       console.error('Waitlist submission failed:', error);
       message = error instanceof Error ? error.message : 'An unexpected error occurred.';
@@ -275,13 +333,11 @@ import { serverAnalytics } from '$lib/server/analytics';
 import { AppEvents } from '$lib/config/analytics'; // Import AppEvents
 import { json, type RequestHandler } from '@sveltejs/kit';
 
-// Dummy function to simulate processing and approving a waitlist application
 async function approveUserForWaitlist(email: string): Promise<{ userId: string }> {
-  // In a real application, you would save the email to a database,
-  // potentially queue it for review, or have some approval logic.
-  // For this example, we'll assume immediate "approval" and generate a simple userId.
   console.log(`Processing waitlist application for: ${email}`);
-  const userId = `user_${Date.now()}_${email.split('@')[0]}`; // Example userId
+
+  const userId = `user_${Date.now()}_${email.split('@')[0]}`;
+
   return { userId };
 }
 
@@ -294,26 +350,24 @@ export const POST: RequestHandler = async ({ request }) => {
       return json({ success: false, message: 'Email is required' }, { status: 400 });
     }
 
-    // Simulate adding to waitlist and immediate approval
     const { userId } = await approveUserForWaitlist(email);
 
-    // Track waitlist approved event on the server
     serverAnalytics.track(AppEvents.waitlistApproved.name, {
       userId,
       email
     }, {
-      userId, // Pass userId for server-side context if needed
+      userId,
       context: {
-        page: { // Example context
+        page: {
           path: '/api/join-waitlist'
         },
-        ip: request.headers.get('x-forwarded-for') || undefined // Example of capturing IP
+        ip: request.headers.get('x-forwarded-for') || undefined
       }
     });
 
-    // Important: Call shutdown if your application instance is short-lived.
+    // Important: Call shutdown if your application instance is short-lived. (e.g. serverless function)
     // For long-running servers, you might call this on server shutdown.
-    // await serverAnalytics.shutdown(); // Commented out as this endpoint is typically part of a long-running server
+    await serverAnalytics.shutdown();
 
     return json({ success: true, userId, message: 'Successfully joined and approved for waitlist.' });
   } catch (error) {
@@ -329,22 +383,6 @@ export const POST: RequestHandler = async ({ request }) => {
   // If it's a long-running server, manage shutdown centrally.
 };
 ```
-
-This example shows:
-
-1.  Setting up client and server analytics instances with specific event definitions for a waitlist.
-2.  Using Svelte 5's `$state` for reactive UI elements.
-3.  Client-side: A user submits their email to a form, triggering a `waitlist_joined` event.
-4.  Server-side: The `/api/join-waitlist` endpoint receives the submission, simulates approval, and triggers a `waitlist_approved` event.
-5.  Type-safe event tracking with distinct properties for each event.
-6.  Basic error handling and user feedback on the client.
-7.  Contextual information (like IP address) can be added to server-side events.
-8.  Considerations for when to call `serverAnalytics.shutdown()`.
-
-The flow demonstrates:
-- User expresses interest by joining the waitlist on the client (tracked with `waitlist_joined`).
-- The server processes this submission, "approves" the user, and tracks this approval (`waitlist_approved`).
-- Clear separation of client-side interaction and server-side processing with corresponding analytics.
 
 ## Advanced Usage
 
@@ -372,8 +410,8 @@ export class AppAnalytics {
   track<T extends AppEventName>(
     eventName: T,
     properties: AppEventProps<T>
-  ): void {
-    this.analytics.track(eventName, properties);
+    ): Promise<void> {
+    return this.analytics.track(eventName, properties);
   }
 
   // ... other methods
@@ -387,8 +425,8 @@ export class ServerAppAnalytics {
     eventName: T,
     properties: AppEventProps<T>,
     options?: { userId?: string; sessionId?: string }
-  ): void {
-    this.analytics.track(eventName, properties, options);
+  ): Promise<void> {
+    return this.analytics.track(eventName, properties, options);
   }
 
   // ... other methods
@@ -586,6 +624,98 @@ analytics.track('user_signed_up', {
 });
 ```
 
+## Server Deployments and waitUntil
+
+When deploying your application to serverless environments, it's important to handle analytics events properly to ensure they are sent before the function terminates. Different platforms provide their own mechanisms for this:
+
+### Vercel Functions
+
+Vercel provides a `waitUntil` API that allows you to continue processing after the response has been sent:
+
+```typescript
+import { waitUntil } from '@vercel/functions';
+
+export default async function handler(req, res) {
+  const analytics = createServerAnalytics({
+    providers: [new PostHogServerProvider({ apiKey: process.env.POSTHOG_API_KEY })]
+  });
+
+  // Track the event - await to ensure it's queued
+  await analytics.track('api_request', {
+    endpoint: '/api/users',
+    method: 'POST',
+    statusCode: 200,
+    responseTime: 150
+  });
+
+  // Use waitUntil to ensure events are sent
+  waitUntil(analytics.shutdown());
+
+  res.status(200).json({ success: true });
+}
+```
+
+### Cloudflare Workers
+
+Cloudflare Workers provides a `waitUntil` method on the execution context:
+
+```typescript
+export default {
+  async fetch(request, env, ctx) {
+    const analytics = createServerAnalytics({
+      providers: [new PostHogServerProvider({ apiKey: env.POSTHOG_API_KEY })]
+    });
+
+    // Track the event - await to ensure it's queued
+    await analytics.track('worker_execution', {
+      url: request.url,
+      method: request.method,
+      cacheStatus: 'MISS',
+      executionTime: 45
+    });
+
+    // Use ctx.waitUntil to ensure events are sent
+    ctx.waitUntil(analytics.shutdown());
+
+    return new Response('OK');
+  }
+};
+```
+
+### Netlify Functions
+
+Netlify Functions also support `waitUntil` through their context object:
+
+```typescript
+export async function handler(event, context) {
+  const analytics = createServerAnalytics({
+    providers: [new PostHogServerProvider({ apiKey: process.env.POSTHOG_API_KEY })]
+  });
+
+  // Track the event - await to ensure it's queued
+  await analytics.track('function_invocation', {
+    path: event.path,
+    httpMethod: event.httpMethod,
+    queryStringParameters: event.queryStringParameters,
+    executionTime: 120
+  });
+
+  // Use context.waitUntil to ensure events are sent
+  context.waitUntil(analytics.shutdown());
+
+  return {
+    statusCode: 200,
+    body: JSON.stringify({ success: true })
+  };
+}
+```
+
+**Important Notes:**
+1. Always call `analytics.shutdown()` within `waitUntil` to ensure events are sent
+2. The `waitUntil` API is platform-specific, so make sure to use the correct import/usage for your deployment platform
+3. For long-running servers (not serverless), you should call `shutdown()` when the server itself is shutting down
+4. Some providers may batch events, so `shutdown()` ensures all pending events are sent
+
 ## API Reference
 
 ### Client API
@@ -598,7 +728,7 @@ Initialize analytics for browser environment.
 - `config.enabled` - Enable/disable analytics
 
 #### `BrowserAnalytics`
-- `track(eventName, properties)` - Track an event
+- `track(eventName, properties): Promise<void>` - Track an event (returns a promise)
 - `identify(userId, traits)` - Identify a user
 - `page(properties)` - Track a page view
 - `reset()` - Reset user session
@@ -614,7 +744,7 @@ Create analytics instance for server environment.
 - `config.enabled` - Enable/disable analytics
 
 #### `ServerAnalytics`
-- `track(eventName, properties, options)` - Track an event with optional context
+- `track(eventName, properties, options): Promise<void>` - Track an event with optional context (returns a promise)
 - `identify(userId, traits)` - Identify a user
 - `page(properties, options)` - Track a page view
 - `shutdown()` - Flush pending events and cleanup

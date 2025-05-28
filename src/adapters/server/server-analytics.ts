@@ -37,7 +37,7 @@ export class ServerAnalytics<
 		}
 	}
 
-	track(
+	async track(
 		eventName: TEventName,
 		properties: TEventProperties,
 		options?: {
@@ -45,7 +45,7 @@ export class ServerAnalytics<
 			sessionId?: string;
 			context?: EventContext;
 		},
-	): void {
+	): Promise<void> {
 		if (!this.initialized) {
 			console.warn("[Analytics] Not initialized. Call initialize() first.");
 			return;
@@ -65,9 +65,21 @@ export class ServerAnalytics<
 			...options?.context,
 		};
 
-		for (const provider of this.providers) {
-			provider.track(event, context);
-		}
+		// Track with all providers in parallel
+		const trackPromises = this.providers.map(async (provider) => {
+			try {
+				await provider.track(event, context);
+			} catch (error) {
+				// Log error but don't throw - one provider failing shouldn't break others
+				console.error(
+					`[Analytics] Provider ${provider.name} failed to track event:`,
+					error,
+				);
+			}
+		});
+
+		// Wait for all providers to complete
+		await Promise.all(trackPromises);
 	}
 
 	page(

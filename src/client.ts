@@ -80,8 +80,8 @@ export function getAnalytics(): BrowserAnalytics {
 export function track(
 	eventName: string,
 	properties: Record<string, unknown>,
-): void {
-	getAnalytics().track(eventName, properties);
+): Promise<void> {
+	return getAnalytics().track(eventName, properties);
 }
 
 /**
