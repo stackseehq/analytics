@@ -8,12 +8,14 @@ on:
 
 concurrency: ${{ github.workflow }}-${{ github.ref }}
 
+# Add workflow-level permissions
+permissions:
+    contents: write
+    pull-requests: write
+    packages: write
+
 jobs:
     release:
-        permissions:
-            contents: write # to create release (changesets/action)
-            pull-requests: write # to create pull request (changesets/action)
-            packages: write # to publish to GitHub Packages
         name: Release
         runs-on: macos-latest
         steps:
