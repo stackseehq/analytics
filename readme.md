@@ -158,27 +158,55 @@ analytics.track('button_clicked', {
 
 #### Await for critical events (Server-side typical usage)
 ```typescript
-// In serverless/edge functions, await to ensure events are sent
+// In serverless/edge functions, you have two patterns:
+
+// Pattern 1: Critical events that MUST complete before response
 export async function handler(req, res) {
   try {
-    // Process the request...
+    // Process payment
+    const paymentResult = await processPayment(req.body);
 
-    // Await critical tracking to ensure it completes
+    // For critical events like payments, await to ensure they're tracked
+    // This blocks the response but guarantees the event is recorded
     await analytics.track('payment_processed', {
-      amount: 99.99,
+      amount: paymentResult.amount,
       currency: 'USD',
+      userId: req.userId,
+      transactionId: paymentResult.id
+    });
+
+    return res.json({ success: true, transactionId: paymentResult.id });
+  } catch (error) {
+    // Even on error, you might want to track
+    await analytics.track('payment_failed', {
+      error: error.message,
       userId: req.userId
     });
 
-    // Ensure all events are flushed before function ends
-    await analytics.shutdown();
-
-    return res.json({ success: true });
-  } catch (error) {
-    // Handle errors appropriately
-    console.error('Failed to track event:', error);
-    return res.status(500).json({ error: 'Internal error' });
+    return res.status(500).json({ error: 'Payment failed' });
   }
+}
+
+// Pattern 2: Non-critical events using waitUntil (Vercel example)
+import { waitUntil } from '@vercel/functions';
+
+export default async function handler(req, res) {
+  const startTime = Date.now();
+
+  // Process request
+  const result = await processRequest(req);
+
+  // Track analytics in background without blocking response
+  waitUntil(
+    analytics.track('api_request', {
+      endpoint: req.url,
+      duration: Date.now() - startTime,
+      userId: req.headers['x-user-id']
+    }).then(() => analytics.shutdown())
+  );
+
+  // Response sent immediately
+  return res.json(result);
 }
 ```
 
@@ -195,9 +223,11 @@ await analytics.track('important_event', { data: 'value' });
 
 #### Best practices:
 - **Client-side**: Usually fire-and-forget for better UX
-- **Server-side**: Usually await, especially in serverless environments
-- **Critical events**: Always await (e.g., payments, conversions)
-- **High-volume events**: Fire-and-forget to avoid blocking
+- **Server-side (serverless)**: Use `waitUntil` for non-critical events to avoid blocking responses
+- **Server-side (long-running)**: Can await or fire-and-forget based on criticality
+- **Critical events**: Always await (e.g., payments, sign-ups, conversions that must be recorded)
+- **High-volume/non-critical events**: Use `waitUntil` in serverless or fire-and-forget in long-running servers
+- **Error tracking**: Consider awaiting to ensure errors are captured before function terminates
 
 ### A complete example
 
@@ -640,18 +670,21 @@ export default async function handler(req, res) {
     providers: [new PostHogServerProvider({ apiKey: process.env.POSTHOG_API_KEY })]
   });
 
-  // Track the event - await to ensure it's queued
-  await analytics.track('api_request', {
-    endpoint: '/api/users',
-    method: 'POST',
-    statusCode: 200,
-    responseTime: 150
-  });
+  // Process your request and prepare response
+  const result = { success: true, data: 'processed' };
 
-  // Use waitUntil to ensure events are sent
-  waitUntil(analytics.shutdown());
+  // Use waitUntil to track events and flush without blocking the response
+  waitUntil(
+    analytics.track('api_request', {
+      endpoint: '/api/users',
+      method: 'POST',
+      statusCode: 200,
+      responseTime: 150
+    }).then(() => analytics.shutdown())
+  );
 
-  res.status(200).json({ success: true });
+  // Response is sent immediately, tracking happens in background
+  res.status(200).json(result);
 }
 ```
 
@@ -666,18 +699,21 @@ export default {
       providers: [new PostHogServerProvider({ apiKey: env.POSTHOG_API_KEY })]
     });
 
-    // Track the event - await to ensure it's queued
-    await analytics.track('worker_execution', {
-      url: request.url,
-      method: request.method,
-      cacheStatus: 'MISS',
-      executionTime: 45
-    });
+    // Process request and prepare response
+    const response = new Response('OK', { status: 200 });
 
-    // Use ctx.waitUntil to ensure events are sent
-    ctx.waitUntil(analytics.shutdown());
+    // Use ctx.waitUntil to track events and flush without blocking the response
+    ctx.waitUntil(
+      analytics.track('worker_execution', {
+        url: request.url,
+        method: request.method,
+        cacheStatus: 'MISS',
+        executionTime: 45
+      }).then(() => analytics.shutdown())
+    );
 
-    return new Response('OK');
+    // Response is returned immediately, tracking happens in background
+    return response;
   }
 };
 ```
@@ -692,20 +728,22 @@ export async function handler(event, context) {
     providers: [new PostHogServerProvider({ apiKey: process.env.POSTHOG_API_KEY })]
   });
 
-  // Track the event - await to ensure it's queued
-  await analytics.track('function_invocation', {
-    path: event.path,
-    httpMethod: event.httpMethod,
-    queryStringParameters: event.queryStringParameters,
-    executionTime: 120
-  });
+  const responseBody = { success: true, data: 'processed' };
 
-  // Use context.waitUntil to ensure events are sent
-  context.waitUntil(analytics.shutdown());
+  // Use context.waitUntil to track events and flush without blocking the response
+  context.waitUntil(
+    analytics.track('function_invocation', {
+      path: event.path,
+      httpMethod: event.httpMethod,
+      queryStringParameters: event.queryStringParameters,
+      executionTime: 120
+    }).then(() => analytics.shutdown())
+  );
 
+  // Response is returned immediately, tracking happens in background
   return {
     statusCode: 200,
-    body: JSON.stringify({ success: true })
+    body: JSON.stringify(responseBody)
   };
 }
 ```
