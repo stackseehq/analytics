@@ -20,7 +20,7 @@ export interface ClientAnalyticsConfig {
  * import { createClientAnalytics } from '@stacksee/analytics/client';
  * import { PostHogClientProvider } from '@stacksee/analytics/providers/posthog';
  *
- * const analytics = await createClientAnalytics({
+ * const analytics = createClientAnalytics({
  *   providers: [
  *     new PostHogClientProvider({
  *       apiKey: 'your-api-key',
@@ -30,11 +30,14 @@ export interface ClientAnalyticsConfig {
  *   debug: true,
  *   enabled: true
  * });
+ *
+ * // Optional: explicitly initialize (otherwise happens on first track/identify/page call)
+ * await analytics.initialize();
  * ```
  */
-export async function createClientAnalytics(
+export function createClientAnalytics(
 	config: ClientAnalyticsConfig,
-): Promise<BrowserAnalytics> {
+): BrowserAnalytics {
 	if (analyticsInstance) {
 		console.warn("[Analytics] Already initialized");
 		return analyticsInstance;
@@ -47,7 +50,11 @@ export async function createClientAnalytics(
 	};
 
 	analyticsInstance = new BrowserAnalytics(analyticsConfig);
-	await analyticsInstance.initialize();
+
+	// Auto-initialize in the background without blocking
+	analyticsInstance.initialize().catch((error) => {
+		console.error("[Analytics] Failed to initialize:", error);
+	});
 
 	return analyticsInstance;
 }
@@ -99,4 +106,12 @@ export function page(properties?: Record<string, unknown>): void {
  */
 export function reset(): void {
 	getAnalytics().reset();
+}
+
+/**
+ * Reset the analytics instance (for testing purposes)
+ * @internal
+ */
+export function resetAnalyticsInstance(): void {
+	analyticsInstance = null;
 }

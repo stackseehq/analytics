@@ -41,6 +41,7 @@ describe("BaseAnalyticsProvider", () => {
 
 	it("should track when enabled", () => {
 		const enabledProvider = new MockAnalyticsProvider({ enabled: true });
+		enabledProvider.initialize();
 
 		enabledProvider.track({
 			action: "test_event",
@@ -58,6 +59,7 @@ describe("BaseAnalyticsProvider", () => {
 
 	it("should handle undefined config", () => {
 		const provider = new MockAnalyticsProvider();
+		provider.initialize();
 
 		// Should default to enabled
 		provider.track({

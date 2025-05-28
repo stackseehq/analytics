@@ -16,6 +16,7 @@ export class BrowserAnalytics<
 	private userId?: string;
 	private sessionId?: string;
 	private initialized = false;
+	private initializePromise?: Promise<void>;
 
 	constructor(config: AnalyticsConfig) {
 		this.providers = config.providers;
@@ -32,6 +33,14 @@ export class BrowserAnalytics<
 	async initialize(): Promise<void> {
 		if (this.initialized) return;
 
+		// If already initializing, return the existing promise
+		if (this.initializePromise) return this.initializePromise;
+
+		this.initializePromise = this._doInitialize();
+		return this.initializePromise;
+	}
+
+	private async _doInitialize(): Promise<void> {
 		// Initialize all providers
 		const initPromises = this.providers.map((provider) =>
 			provider.initialize(),
@@ -55,18 +64,32 @@ export class BrowserAnalytics<
 		});
 	}
 
+	private async ensureInitialized(): Promise<void> {
+		if (!this.initialized && !this.initializePromise) {
+			await this.initialize();
+		} else if (this.initializePromise) {
+			await this.initializePromise;
+		}
+	}
+
 	identify(userId: string, traits?: Record<string, unknown>): void {
 		this.userId = userId;
+
+		// Run initialization if needed, but don't block
+		this.ensureInitialized().catch((error) => {
+			console.error("[Analytics] Failed to initialize during identify:", error);
+		});
+
 		for (const provider of this.providers) {
 			provider.identify(userId, traits);
 		}
 	}
 
 	track(eventName: TEventName, properties: TEventProperties): void {
-		if (!this.initialized) {
-			console.warn("[Analytics] Not initialized. Call initialize() first.");
-			return;
-		}
+		// Run initialization if needed, but don't block
+		this.ensureInitialized().catch((error) => {
+			console.error("[Analytics] Failed to initialize during track:", error);
+		});
 
 		const event: BaseEvent = {
 			action: eventName,
@@ -83,7 +106,10 @@ export class BrowserAnalytics<
 	}
 
 	page(properties?: Record<string, unknown>): void {
-		if (!this.initialized) return;
+		// Run initialization if needed, but don't block
+		this.ensureInitialized().catch((error) => {
+			console.error("[Analytics] Failed to initialize during page:", error);
+		});
 
 		// Update page context
 		this.updateContext({

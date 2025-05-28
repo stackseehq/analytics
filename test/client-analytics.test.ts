@@ -4,7 +4,11 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
 import { MockAnalyticsProvider } from "./mock-provider";
 import type { CreateEventDefinition, EventCollection } from "@/core/events";
-import { createClientAnalytics, getAnalytics } from "@/client";
+import {
+	createClientAnalytics,
+	getAnalytics,
+	resetAnalyticsInstance,
+} from "@/client";
 import { BrowserAnalytics } from "@/adapters/client/browser-analytics";
 
 // Mock window.location
@@ -44,15 +48,20 @@ describe("Client Analytics", () => {
 	let analytics: BrowserAnalytics;
 
 	beforeEach(async () => {
-		// Reset modules to clear singleton
-		vi.resetModules();
+		// Reset singleton instance
+		resetAnalyticsInstance();
 
+		// Clear any previous mock calls
 		mockProvider = new MockAnalyticsProvider({ debug: false, enabled: true });
-		analytics = await createClientAnalytics({
+
+		analytics = createClientAnalytics({
 			providers: [mockProvider],
 			debug: false,
 			enabled: true,
 		});
+
+		// Wait for initialization to complete
+		await analytics.initialize();
 	});
 
 	afterEach(() => {
@@ -63,11 +72,14 @@ describe("Client Analytics", () => {
 		expect(mockProvider.calls.initialize).toBe(1);
 	});
 
-	it("should track events with browser context", () => {
+	it("should track events with browser context", async () => {
 		analytics.track(TestEvents.pageViewed.name, {
 			path: "/dashboard",
 			title: "Dashboard",
 		});
+
+		// Wait for async initialization
+		await new Promise((resolve) => setTimeout(resolve, 10));
 
 		expect(mockProvider.calls.track).toHaveLength(1);
 		const trackedEvent = mockProvider.calls.track[0];
@@ -76,22 +88,28 @@ describe("Client Analytics", () => {
 		expect(trackedEvent.context?.page?.path).toBe("/test-page");
 	});
 
-	it("should generate session ID", () => {
+	it("should generate session ID", async () => {
 		analytics.track(TestEvents.buttonClicked.name, {
 			buttonId: "submit-btn",
 			label: "Submit",
 		});
+
+		// Wait for async initialization
+		await new Promise((resolve) => setTimeout(resolve, 10));
 
 		const trackedEvent = mockProvider.calls.track[0];
 		expect(trackedEvent.event.sessionId).toBeDefined();
 		expect(trackedEvent.event.sessionId).toMatch(/^\d+-[a-z0-9]{9}$/);
 	});
 
-	it("should identify users and include userId in events", () => {
+	it("should identify users and include userId in events", async () => {
 		analytics.identify("user-123", {
 			email: "test@example.com",
 			name: "Test User",
 		});
+
+		// Wait for async initialization
+		await new Promise((resolve) => setTimeout(resolve, 10));
 
 		expect(mockProvider.calls.identify).toHaveLength(1);
 		expect(mockProvider.calls.identify[0]).toEqual({
@@ -104,14 +122,21 @@ describe("Client Analytics", () => {
 
 		// Track event after identify
 		analytics.track("test_event", { test: true });
+
+		// Wait for async initialization
+		await new Promise((resolve) => setTimeout(resolve, 10));
+
 		const trackedEvent = mockProvider.calls.track[0];
 		expect(trackedEvent.event.userId).toBe("user-123");
 	});
 
-	it("should track page views with updated context", () => {
+	it("should track page views with updated context", async () => {
 		analytics.page({
 			customProp: "value",
 		});
+
+		// Wait for async initialization
+		await new Promise((resolve) => setTimeout(resolve, 10));
 
 		expect(mockProvider.calls.page).toHaveLength(1);
 		const pageView = mockProvider.calls.page[0];
@@ -121,12 +146,16 @@ describe("Client Analytics", () => {
 		expect(pageView.context?.page?.path).toBe("/test-page");
 	});
 
-	it("should reset user session", () => {
+	it("should reset user session", async () => {
 		// Identify user first
 		analytics.identify("user-123", { name: "Test" });
 
 		// Get initial session ID
 		analytics.track("before_reset", {});
+
+		// Wait for async initialization
+		await new Promise((resolve) => setTimeout(resolve, 10));
+
 		const beforeReset = mockProvider.calls.track[0];
 		const initialSessionId = beforeReset.event.sessionId;
 
@@ -136,6 +165,10 @@ describe("Client Analytics", () => {
 
 		// Track after reset
 		analytics.track("after_reset", {});
+
+		// Wait for async initialization
+		await new Promise((resolve) => setTimeout(resolve, 10));
+
 		const afterReset = mockProvider.calls.track[1];
 
 		// Should have new session ID and no user ID
@@ -143,7 +176,7 @@ describe("Client Analytics", () => {
 		expect(afterReset.event.userId).toBeUndefined();
 	});
 
-	it("should update context", () => {
+	it("should update context", async () => {
 		analytics.updateContext({
 			campaign: {
 				source: "google",
@@ -153,6 +186,10 @@ describe("Client Analytics", () => {
 		});
 
 		analytics.track("test_event", {});
+
+		// Wait for async initialization
+		await new Promise((resolve) => setTimeout(resolve, 10));
+
 		const trackedEvent = mockProvider.calls.track[0];
 		expect(trackedEvent.context?.campaign).toEqual({
 			source: "google",
@@ -173,10 +210,13 @@ describe("Client Analytics", () => {
 			"../src/client"
 		);
 
-		const multiAnalytics = await freshCreateClientAnalytics({
+		const multiAnalytics = freshCreateClientAnalytics({
 			providers: [mockProvider1, mockProvider2],
 			enabled: true,
 		});
+
+		// Wait for initialization
+		await multiAnalytics.initialize();
 
 		multiAnalytics.track("test_event", { test: true });
 
@@ -185,27 +225,37 @@ describe("Client Analytics", () => {
 		expect(mockProvider2.calls.track).toHaveLength(1);
 	});
 
-	it("should warn if tracking before initialization", () => {
-		const consoleSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-
+	it("should auto-initialize when tracking before explicit initialization", async () => {
 		// Create analytics without initializing
+		const uninitializedProvider = new MockAnalyticsProvider({ enabled: true });
 		const uninitializedAnalytics = new BrowserAnalytics({
-			providers: [mockProvider],
+			providers: [uninitializedProvider],
 		});
 
-		uninitializedAnalytics.track("test_event", {});
+		// Track without explicit initialization
+		uninitializedAnalytics.track("test_event", { data: "test" });
 
-		expect(consoleSpy).toHaveBeenCalledWith(
-			"[Analytics] Not initialized. Call initialize() first.",
+		// Wait for auto-initialization
+		await new Promise((resolve) => setTimeout(resolve, 10));
+
+		// Should have initialized the provider
+		expect(uninitializedProvider.calls.initialize).toBe(1);
+
+		// And tracked the event
+		expect(uninitializedProvider.calls.track).toHaveLength(1);
+		expect(uninitializedProvider.calls.track[0].event.action).toBe(
+			"test_event",
 		);
-
-		consoleSpy.mockRestore();
 	});
 
-	it("should extract category from event name", () => {
+	it("should extract category from event name", async () => {
 		analytics.track("custom_action", { data: "test" });
 
+		// Wait for async initialization
+		await new Promise((resolve) => setTimeout(resolve, 10));
+
 		const trackedEvent = mockProvider.calls.track[0];
+		console.log("trackedEvent", trackedEvent);
 		expect(trackedEvent.event.category).toBe("custom");
 	});
 

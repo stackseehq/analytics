@@ -8,16 +8,16 @@ export {
 	page,
 	reset,
 	type ClientAnalyticsConfig,
-} from "../client.js";
+} from "@/client.js";
 
-export { BrowserAnalytics } from "../adapters/client/browser-analytics.js";
+export { BrowserAnalytics } from "@/adapters/client/browser-analytics.js";
 
 // Client-side providers
-export { PostHogClientProvider } from "../providers/posthog/client.js";
-export type { PostHogConfig } from "../providers/posthog/types.js";
+export { PostHogClientProvider } from "@/providers/posthog/client.js";
+export type { PostHogConfig } from "@/providers/posthog/types.js";
 
 // Base provider for creating custom providers
-export { BaseAnalyticsProvider } from "../providers/base.provider.js";
+export { BaseAnalyticsProvider } from "@/providers/base.provider.js";
 
 // Type exports
 export type {
@@ -35,4 +35,4 @@ export type {
 	EventCollection,
 	AnyEventName,
 	AnyEventProperties,
-} from "../core/events/index.js";
+} from "@/core/events/index.js";

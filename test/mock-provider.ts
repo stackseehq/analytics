@@ -3,6 +3,7 @@ import type { BaseEvent, EventContext } from "@/core/events/types";
 
 export class MockAnalyticsProvider extends BaseAnalyticsProvider {
 	name = "MockProvider";
+	private initialized = false;
 
 	// Track all method calls for testing
 	public calls: {
@@ -24,29 +25,30 @@ export class MockAnalyticsProvider extends BaseAnalyticsProvider {
 
 	initialize(): void {
 		this.calls.initialize++;
+		this.initialized = true;
 		this.log("Initialized");
 	}
 
 	identify(userId: string, traits?: Record<string, unknown>): void {
-		if (!this.isEnabled()) return;
+		if (!this.isEnabled() || !this.initialized) return;
 		this.calls.identify.push({ userId, traits });
 		this.log("Identified user", { userId, traits });
 	}
 
 	track(event: BaseEvent, context?: EventContext): void {
-		if (!this.isEnabled()) return;
+		if (!this.isEnabled() || !this.initialized) return;
 		this.calls.track.push({ event, context });
 		this.log("Tracked event", { event, context });
 	}
 
 	page(properties?: Record<string, unknown>, context?: EventContext): void {
-		if (!this.isEnabled()) return;
+		if (!this.isEnabled() || !this.initialized) return;
 		this.calls.page.push({ properties, context });
 		this.log("Tracked page view", { properties, context });
 	}
 
 	reset(): void {
-		if (!this.isEnabled()) return;
+		if (!this.isEnabled() || !this.initialized) return;
 		this.calls.reset++;
 		this.log("Reset");
 	}
@@ -60,5 +62,10 @@ export class MockAnalyticsProvider extends BaseAnalyticsProvider {
 			page: [],
 			reset: 0,
 		};
+	}
+
+	// Helper to check if initialized (for testing)
+	isInitialized(): boolean {
+		return this.initialized;
 	}
 }

@@ -25,7 +25,8 @@
     "LICENSE"
   ],
   "scripts": {
-    "test": "vitest",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "build": "vite build",
     "deploy": "npm publish",
     "typecheck": "tsc --noEmit",
@@ -46,7 +47,7 @@
   "license": "ISC",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/stacksee/analytics.git"
+    "url": "git+https://github.com/stackseehq/analytics.git"
   },
   "devDependencies": {
     "@biomejs/biome": "1.9.4",
