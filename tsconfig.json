@@ -1,0 +1,23 @@
+{
+	"compilerOptions": {
+		"lib": ["ESNext", "DOM", "DOM.Iterable"],
+		"module": "ESNext",
+		"moduleResolution": "bundler",
+		"noImplicitReturns": true,
+		"esModuleInterop": true,
+		"outDir": "dist",
+		"sourceMap": true,
+		"target": "ESNext",
+		"declaration": true,
+		"isolatedDeclarations": true,
+		"skipLibCheck": true,
+		"types": ["node", "vitest/globals"],
+		"baseUrl": ".",
+		"paths": {
+			"@/*": ["./src/*"]
+		}
+	},
+	"compileOnSave": true,
+	"include": ["src", "test"],
+	"exclude": ["node_modules", "dist", "coverage"]
+}
