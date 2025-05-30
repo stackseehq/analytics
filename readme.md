@@ -62,8 +62,7 @@ Create strongly typed events specific to your application:
 ```typescript
 import { CreateEventDefinition, EventCollection } from '@stacksee/analytics';
 
-// Define your event types
-export const AppEvents = {
+export const appEvents = {
   userSignedUp: {
     name: 'user_signed_up',
     category: 'user',
@@ -86,9 +85,10 @@ export const AppEvents = {
   }
 } as const satisfies EventCollection<Record<string, CreateEventDefinition<string>>>;
 
-// Extract types for use in your app
-export type AppEventName = keyof typeof AppEvents;
-export type AppEventProperties<T extends AppEventName> = typeof AppEvents[T]['properties'];
+// Optionally extract types for use in your app
+export type AppEvents = typeof appEvents;
+export type AppEventName = keyof typeof appEvents;
+export type AppEventProperties<T extends AppEventName> = typeof appEvents[T]['properties'];
 ```
 
 Tip: If you have a lot of events, you can also divide your events into multiple files, then export them as a single object.
@@ -98,10 +98,11 @@ Tip: If you have a lot of events, you can also divide your events into multiple 
 ```typescript
 import { createClientAnalytics } from '@stacksee/analytics/client';
 import { PostHogClientProvider } from '@stacksee/analytics/providers/posthog';
-import { AppEvents } from './events';
+import type { AppEvents } from './events';
 
 // Initialize analytics with providers as plugins
-const analytics = createClientAnalytics({
+// Pass your event collection as a type parameter for full type safety
+const analytics = createClientAnalytics<AppEvents>({
   providers: [
     new PostHogClientProvider({
       apiKey: 'your-posthog-api-key',
@@ -113,19 +114,17 @@ const analytics = createClientAnalytics({
   enabled: true
 });
 
-// Track events with full type safety
-analytics.track(AppEvents.pageViewed.name, {
-  path: '/dashboard',
-  title: 'Dashboard',
-  referrer: document.referrer
-});
-
-analytics.track(AppEvents.userSignedUp.name, {
+// Track events with full type safety - event names and properties are typed!
+analytics.track('user_signed_up', {
   userId: 'user-123',
   email: 'user@example.com',
   plan: 'pro',
   referralSource: 'google'
 });
+
+// TypeScript will error if you use wrong event names or properties
+// analytics.track('wrong_event', {}); // ❌ Error: Argument of type '"wrong_event"' is not assignable
+// analytics.track('user_signed_up', { wrongProp: 'value' }); // ❌ Error: Object literal may only specify known properties
 
 // Identify users
 analytics.identify('user-123', {
@@ -140,10 +139,11 @@ analytics.identify('user-123', {
 ```typescript
 import { createServerAnalytics } from '@stacksee/analytics/server';
 import { PostHogServerProvider } from '@stacksee/analytics/providers/posthog';
-import { AppEvents } from './events';
+import type { AppEvents } from './events';
 
 // Create analytics instance with providers as plugins
-const analytics = createServerAnalytics({
+// Pass your event collection as a type parameter for full type safety
+const analytics = createServerAnalytics<AppEvents>({
   providers: [
     new PostHogServerProvider({
       apiKey: process.env.POSTHOG_API_KEY,
@@ -155,8 +155,8 @@ const analytics = createServerAnalytics({
   enabled: true
 });
 
-// Track events - now returns a Promise
-await analytics.track(AppEvents.featureUsed.name, {
+// Track events - now returns a Promise with full type safety
+await analytics.track('feature_used', {
   featureName: 'export-data',
   userId: 'user-123',
   duration: 1500
@@ -272,7 +272,7 @@ import { PostHogClientProvider } from '@stacksee/analytics/providers/posthog';
 import { PUBLIC_POSTHOG_API_KEY, PUBLIC_POSTHOG_HOST } from '$env/static/public';
 
 // Define your events for the waitlist
-export const AppEvents = {
+export const appEvents = {
   waitlistJoined: {
     name: 'waitlist_joined',
     category: 'user',
@@ -292,11 +292,11 @@ export const AppEvents = {
 } as const;
 
 // Client-side analytics instance
-export const clientAnalytics = createClientAnalytics({
+export const clientAnalytics = createClientAnalytics<AppEvents>({
   providers: [
     new PostHogClientProvider({
-      apiKey: import.meta.env.VITE_POSTHOG_KEY, // Ensure VITE_POSTHOG_KEY is in your .env file
-      host: 'https://app.posthog.com'
+      apiKey: PUBLIC_POSTHOG_API_KEY,
+      host: PUBLIC_POSTHOG_HOST
     })
   ],
   debug: import.meta.env.DEV
@@ -310,7 +310,7 @@ import { PostHogServerProvider } from '@stacksee/analytics/providers/posthog';
 import { AppEvents } from '$lib/config/analytics'; // Import AppEvents
 import { PUBLIC_POSTHOG_API_KEY, PUBLIC_POSTHOG_HOST } from '$env/static/public';
 
-export const serverAnalytics = createServerAnalytics({
+export const serverAnalytics = createServerAnalytics<AppEvents>({
   providers: [
     new PostHogServerProvider({
       apiKey: PUBLIC_POSTHOG_API_KEY,
@@ -324,7 +324,7 @@ export const serverAnalytics = createServerAnalytics({
 ```svelte
 <!-- src/routes/join-waitlist/+page.svelte -->
 <script lang="ts">
-  import { clientAnalytics, AppEvents } from '$lib/config/analytics';
+  import { clientAnalytics } from '$lib/config/analytics';
 
   let email = $state('');
   let loading = $state(false);
@@ -337,7 +337,7 @@ export const serverAnalytics = createServerAnalytics({
 
     try {
       // Track waitlist joined event on the client
-      clientAnalytics.track(AppEvents.waitlistJoined.name, {
+      clientAnalytics.track('waitlist_joined', {
         email,
         source: 'waitlist_page_form'
       });
@@ -392,7 +392,6 @@ export const serverAnalytics = createServerAnalytics({
 ```typescript
 // src/routes/api/join-waitlist/+server.ts
 import { serverAnalytics } from '$lib/server/analytics';
-import { AppEvents } from '$lib/config/analytics'; // Import AppEvents
 import { json, type RequestHandler } from '@sveltejs/kit';
 
 async function approveUserForWaitlist(email: string): Promise<{ userId: string }> {
@@ -414,7 +413,7 @@ export const POST: RequestHandler = async ({ request }) => {
 
     const { userId } = await approveUserForWaitlist(email);
 
-    serverAnalytics.track(AppEvents.waitlistApproved.name, {
+    serverAnalytics.track('waitlist_approved', {
       userId,
       email
     }, {
@@ -446,55 +445,6 @@ export const POST: RequestHandler = async ({ request }) => {
 };
 ```
 
-## Advanced Usage
-
-### Creating a Typed Analytics Service
-
-For better type safety across your application, create a typed wrapper:
-
-```typescript
-import {
-  BrowserAnalytics,
-  ServerAnalytics,
-  ExtractEventNames,
-  ExtractEventPropertiesFromCollection
-} from '@stacksee/analytics';
-import { AppEvents } from './events';
-
-// Type aliases for your app
-type AppEventName = ExtractEventNames<typeof AppEvents>;
-type AppEventProps<T extends AppEventName> = ExtractEventPropertiesFromCollection<typeof AppEvents, T>;
-
-// Client-side typed wrapper
-export class AppAnalytics {
-  constructor(private analytics: BrowserAnalytics) {}
-
-  track<T extends AppEventName>(
-    eventName: T,
-    properties: AppEventProps<T>
-    ): Promise<void> {
-    return this.analytics.track(eventName, properties);
-  }
-
-  // ... other methods
-}
-
-// Server-side typed wrapper
-export class ServerAppAnalytics {
-  constructor(private analytics: ServerAnalytics) {}
-
-  track<T extends AppEventName>(
-    eventName: T,
-    properties: AppEventProps<T>,
-    options?: { userId?: string; sessionId?: string }
-  ): Promise<void> {
-    return this.analytics.track(eventName, properties, options);
-  }
-
-  // ... other methods
-}
-```
-
 ### Event Categories
 
 Event categories help organize your analytics data. The SDK provides predefined categories with TypeScript autocomplete:
@@ -510,7 +460,7 @@ Event categories help organize your analytics data. The SDK provides predefined 
 You can also use **custom categories** for your specific needs:
 
 ```typescript
-export const AppEvents = {
+export const appEvents = {
   aiResponse: {
     name: 'ai_response_generated',
     category: 'ai', // Custom category
@@ -568,7 +518,7 @@ export class GoogleAnalyticsProvider extends BaseAnalyticsProvider {
 Then use it as a plugin in your configuration:
 
 ```typescript
-const analytics = await createClientAnalytics({
+const analytics = await createClientAnalytics<typeof AppEvents>({
   providers: [
     new PostHogClientProvider({ apiKey: 'xxx' }),
     new GoogleAnalyticsProvider({ measurementId: 'xxx' })
@@ -620,7 +570,7 @@ Then use the appropriate provider based on your environment:
 import { createClientAnalytics } from '@stacksee/analytics/client';
 import { MixpanelClientProvider } from './providers/mixpanel-client';
 
-const clientAnalytics = createClientAnalytics({
+const clientAnalytics = createClientAnalytics<typeof AppEvents>({
   providers: [
     new MixpanelClientProvider({ projectToken: 'xxx' })
   ]
@@ -630,7 +580,7 @@ const clientAnalytics = createClientAnalytics({
 import { createServerAnalytics } from '@stacksee/analytics/server';
 import { MixpanelServerProvider } from './providers/mixpanel-server';
 
-const serverAnalytics = createServerAnalytics({
+const serverAnalytics = createServerAnalytics<typeof AppEvents>({
   providers: [
     new MixpanelServerProvider({
       projectToken: 'xxx',
@@ -657,7 +607,7 @@ import { PostHogClientProvider } from '@stacksee/analytics/providers/posthog';
 import { GoogleAnalyticsProvider } from './providers/google-analytics';
 import { MixpanelProvider } from './providers/mixpanel';
 
-const analytics = createClientAnalytics({
+const analytics = createClientAnalytics<typeof AppEvents>({
   providers: [
     // PostHog for product analytics
     new PostHogClientProvider({
@@ -698,7 +648,7 @@ Vercel provides a `waitUntil` API that allows you to continue processing after t
 import { waitUntil } from '@vercel/functions';
 
 export default async function handler(req, res) {
-  const analytics = createServerAnalytics({
+  const analytics = createServerAnalytics<typeof AppEvents>({
     providers: [new PostHogServerProvider({ apiKey: process.env.POSTHOG_API_KEY })]
   });
 
@@ -727,7 +677,7 @@ Cloudflare Workers provides a `waitUntil` method on the execution context:
 ```typescript
 export default {
   async fetch(request, env, ctx) {
-    const analytics = createServerAnalytics({
+    const analytics = createServerAnalytics<typeof AppEvents>({
       providers: [new PostHogServerProvider({ apiKey: env.POSTHOG_API_KEY })]
     });
 
@@ -756,7 +706,7 @@ Netlify Functions also support `waitUntil` through their context object:
 
 ```typescript
 export async function handler(event, context) {
-  const analytics = createServerAnalytics({
+  const analytics = createServerAnalytics<AppEvents>({
     providers: [new PostHogServerProvider({ apiKey: process.env.POSTHOG_API_KEY })]
   });
 
@@ -790,15 +740,24 @@ export async function handler(event, context) {
 
 ### Client API
 
-#### `createClientAnalytics(config)`
-Initialize analytics for browser environment.
+#### `createClientAnalytics<TEvents>(config)`
+Initialize analytics for browser environment with optional type-safe events.
 
+- `TEvents` - (optional) Your event collection type for full type safety
 - `config.providers` - Array of analytics provider instances
 - `config.debug` - Enable debug logging
 - `config.enabled` - Enable/disable analytics
 
-#### `BrowserAnalytics`
-- `track(eventName, properties): Promise<void>` - Track an event (returns a promise)
+```typescript
+const analytics = createClientAnalytics<typeof AppEvents>({
+  providers: [/* ... */],
+  debug: true,
+  enabled: true
+});
+```
+
+#### `BrowserAnalytics<TEventMap>`
+- `track(eventName, properties): Promise<void>` - Track an event with type-safe event names and properties
 - `identify(userId, traits)` - Identify a user
 - `page(properties)` - Track a page view
 - `reset()` - Reset user session
@@ -806,15 +765,24 @@ Initialize analytics for browser environment.
 
 ### Server API
 
-#### `createServerAnalytics(config)`
-Create analytics instance for server environment.
+#### `createServerAnalytics<TEvents>(config)`
+Create analytics instance for server environment with optional type-safe events.
 
+- `TEvents` - (optional) Your event collection type for full type safety
 - `config.providers` - Array of analytics provider instances
 - `config.debug` - Enable debug logging
 - `config.enabled` - Enable/disable analytics
 
-#### `ServerAnalytics`
-- `track(eventName, properties, options): Promise<void>` - Track an event with optional context (returns a promise)
+```typescript
+const analytics = createServerAnalytics<AppEvents>({
+  providers: [/* ... */],
+  debug: true,
+  enabled: true
+});
+```
+
+#### `ServerAnalytics<TEventMap>`
+- `track(eventName, properties, options): Promise<void>` - Track an event with type-safe event names and properties
 - `identify(userId, traits)` - Identify a user
 - `page(properties, options)` - Track a page view
 - `shutdown()` - Flush pending events and cleanup

@@ -63,7 +63,7 @@ export class PostHogServerProvider extends BaseAnalyticsProvider {
 				$referrer: context.page.referrer,
 			}),
 			...(context?.device && { device: context.device }),
-			...(context?.campaign && { campaign: context.campaign }),
+			...(context?.utm && { utm: context.utm }),
 		};
 
 		this.client.capture({

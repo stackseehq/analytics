@@ -12,6 +12,7 @@ export default defineConfig(({ mode }) => {
 					index: resolve(__dirname, "src/index.ts"),
 					client: resolve(__dirname, "src/client.ts"),
 					server: resolve(__dirname, "src/server.ts"),
+					providers: resolve(__dirname, "src/providers/index.ts"),
 				},
 				formats: ["es"],
 			},

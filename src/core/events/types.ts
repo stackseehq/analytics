@@ -32,7 +32,7 @@ export interface EventContext {
 		os?: string;
 		browser?: string;
 	};
-	campaign?: {
+	utm?: {
 		source?: string;
 		medium?: string;
 		name?: string;

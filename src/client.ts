@@ -3,8 +3,26 @@ import type {
 	AnalyticsConfig,
 	AnalyticsProvider,
 } from "@/core/events/types.js";
+import type {
+	EventCollection,
+	CreateEventDefinition,
+} from "@/core/events/index.js";
 
-let analyticsInstance: BrowserAnalytics | null = null;
+// Default event map type
+type DefaultEventMap = Record<string, Record<string, unknown>>;
+
+// Type to extract event map from event collection
+type EventMapFromCollection<T> = T extends EventCollection<infer Events>
+	? {
+			[K in keyof Events as Events[K] extends { name: infer N }
+				? N extends string
+					? N
+					: never
+				: never]: Events[K] extends { properties: infer P } ? P : never;
+		}
+	: never;
+
+let analyticsInstance: BrowserAnalytics<DefaultEventMap> | null = null;
 
 export interface ClientAnalyticsConfig {
 	providers?: AnalyticsProvider[];
@@ -19,8 +37,9 @@ export interface ClientAnalyticsConfig {
  * ```typescript
  * import { createClientAnalytics } from '@stacksee/analytics/client';
  * import { PostHogClientProvider } from '@stacksee/analytics/providers/posthog';
+ * import { AppEvents } from './events';
  *
- * const analytics = createClientAnalytics({
+ * const analytics = createClientAnalytics<typeof AppEvents>({
  *   providers: [
  *     new PostHogClientProvider({
  *       apiKey: 'your-api-key',
@@ -31,16 +50,22 @@ export interface ClientAnalyticsConfig {
  *   enabled: true
  * });
  *
- * // Optional: explicitly initialize (otherwise happens on first track/identify/page call)
- * await analytics.initialize();
+ * // Now event names and properties are fully typed!
+ * analytics.track('user_signed_up', {
+ *   userId: 'user-123',
+ *   email: 'user@example.com',
+ *   plan: 'pro'
+ * });
  * ```
  */
-export function createClientAnalytics(
+export function createClientAnalytics<TEvents = never>(
 	config: ClientAnalyticsConfig,
-): BrowserAnalytics {
+): BrowserAnalytics<EventMapFromCollection<TEvents>> {
 	if (analyticsInstance) {
 		console.warn("[Analytics] Already initialized");
-		return analyticsInstance;
+		return analyticsInstance as BrowserAnalytics<
+			EventMapFromCollection<TEvents>
+		>;
 	}
 
 	const analyticsConfig: AnalyticsConfig = {
@@ -49,7 +74,9 @@ export function createClientAnalytics(
 		enabled: config.enabled,
 	};
 
-	analyticsInstance = new BrowserAnalytics(analyticsConfig);
+	analyticsInstance = new BrowserAnalytics<EventMapFromCollection<TEvents>>(
+		analyticsConfig,
+	);
 
 	// Auto-initialize in the background without blocking
 	analyticsInstance.initialize().catch((error) => {
@@ -65,7 +92,7 @@ export { createClientAnalytics as createAnalytics };
 /**
  * Get the current analytics instance
  */
-export function getAnalytics(): BrowserAnalytics {
+export function getAnalytics(): BrowserAnalytics<DefaultEventMap> {
 	if (!analyticsInstance) {
 		throw new Error(
 			"[Analytics] Not initialized. Call createAnalytics() first.",

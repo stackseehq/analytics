@@ -7,9 +7,11 @@ import type {
 	EventContext,
 } from "@/core/events/types.js";
 
+// Default event map type
+type DefaultEventMap = Record<string, Record<string, unknown>>;
+
 export class ServerAnalytics<
-	TEventName extends string = AnyEventName,
-	TEventProperties extends Record<string, unknown> = AnyEventProperties,
+	TEventMap extends DefaultEventMap = DefaultEventMap,
 > {
 	private providers: AnalyticsProvider[] = [];
 	private config: AnalyticsConfig;
@@ -37,9 +39,9 @@ export class ServerAnalytics<
 		}
 	}
 
-	async track(
+	async track<TEventName extends keyof TEventMap & string>(
 		eventName: TEventName,
-		properties: TEventProperties,
+		properties: TEventMap[TEventName],
 		options?: {
 			userId?: string;
 			sessionId?: string;

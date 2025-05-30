@@ -134,12 +134,18 @@ describe("Server Analytics", () => {
 
 	it("should handle multiple providers", async () => {
 		const mockProvider2 = new MockAnalyticsProvider({ enabled: true });
-		const multiAnalytics = createServerAnalytics({
+		const multiAnalytics = createServerAnalytics<{
+			userSignedUp: {
+				name: "user_signed_up";
+				category: "user";
+				properties: { userId: string };
+			};
+		}>({
 			providers: [mockProvider, mockProvider2],
 			enabled: true,
 		});
 
-		await multiAnalytics.track("test_event", { test: true });
+		await multiAnalytics.track("user_signed_up", { userId: "user-123" });
 
 		expect(mockProvider.calls.track).toHaveLength(1);
 		expect(mockProvider2.calls.track).toHaveLength(1);
@@ -147,12 +153,18 @@ describe("Server Analytics", () => {
 
 	it("should respect enabled flag", () => {
 		const disabledProvider = new MockAnalyticsProvider({ enabled: false });
-		const disabledAnalytics = createServerAnalytics({
+		const disabledAnalytics = createServerAnalytics<{
+			userSignedUp: {
+				name: "user_signed_up";
+				category: "user";
+				properties: { userId: string };
+			};
+		}>({
 			providers: [disabledProvider],
 			enabled: true,
 		});
 
-		disabledAnalytics.track("test_event", { test: true });
+		disabledAnalytics.track("user_signed_up", { userId: "user-123" });
 
 		expect(disabledProvider.calls.track).toHaveLength(0);
 	});

@@ -163,7 +163,7 @@ describe("Client Analytics", () => {
 
 	it("should update context", async () => {
 		analytics.updateContext({
-			campaign: {
+			utm: {
 				source: "google",
 				medium: "cpc",
 				name: "summer-sale",
@@ -173,7 +173,7 @@ describe("Client Analytics", () => {
 		await analytics.track("test_event", {});
 
 		const trackedEvent = mockProvider.calls.track[0];
-		expect(trackedEvent.context?.campaign).toEqual({
+		expect(trackedEvent.context?.utm).toEqual({
 			source: "google",
 			medium: "cpc",
 			name: "summer-sale",
@@ -192,7 +192,13 @@ describe("Client Analytics", () => {
 			"../src/client"
 		);
 
-		const multiAnalytics = freshCreateClientAnalytics({
+		const multiAnalytics = freshCreateClientAnalytics<{
+			testEvent: {
+				name: "test_event";
+				category: "engagement";
+				properties: { test: boolean };
+			};
+		}>({
 			providers: [mockProvider1, mockProvider2],
 			enabled: true,
 		});

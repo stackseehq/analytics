@@ -73,7 +73,7 @@ export class PostHogClientProvider extends BaseAnalyticsProvider {
 			...(event.sessionId && { sessionId: event.sessionId }),
 			...(context?.page && { $current_url: context.page.path }),
 			...(context?.device && { device: context.device }),
-			...(context?.campaign && { campaign: context.campaign }),
+			...(context?.utm && { utm: context.utm }),
 		};
 
 		this.posthog.capture(event.action, properties);

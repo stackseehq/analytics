@@ -1,4 +1,3 @@
-import type { AnyEventName, AnyEventProperties } from "@/core/events/index.js";
 import type {
 	AnalyticsConfig,
 	AnalyticsProvider,
@@ -7,9 +6,11 @@ import type {
 	EventContext,
 } from "@/core/events/types.js";
 
+// Default event map type
+type DefaultEventMap = Record<string, Record<string, unknown>>;
+
 export class BrowserAnalytics<
-	TEventName extends string = AnyEventName,
-	TEventProperties extends Record<string, unknown> = AnyEventProperties,
+	TEventMap extends DefaultEventMap = DefaultEventMap,
 > {
 	private providers: AnalyticsProvider[] = [];
 	private context: EventContext = {};
@@ -85,9 +86,9 @@ export class BrowserAnalytics<
 		}
 	}
 
-	async track(
+	async track<TEventName extends keyof TEventMap & string>(
 		eventName: TEventName,
-		properties: TEventProperties,
+		properties: TEventMap[TEventName],
 	): Promise<void> {
 		// Ensure initialization but don't block the track call
 		await this.ensureInitialized();
@@ -164,9 +165,9 @@ export class BrowserAnalytics<
 				...this.context.device,
 				...context.device,
 			},
-			campaign: {
-				...this.context.campaign,
-				...context.campaign,
+			utm: {
+				...this.context.utm,
+				...context.utm,
 			},
 		};
 	}
