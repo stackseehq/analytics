@@ -13,6 +13,7 @@ export type {
 	EventCollection,
 	AnyEventName,
 	AnyEventProperties,
+	EventMapFromCollection,
 } from "@/core/events/index.js";
 
 // Client exports

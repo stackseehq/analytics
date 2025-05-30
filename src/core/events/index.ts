@@ -29,6 +29,16 @@ export type EventCollection<
 	T extends Record<string, CreateEventDefinition<string>>,
 > = T;
 
+export type EventMapFromCollection<T> = T extends EventCollection<infer Events>
+	? {
+			[K in keyof Events as Events[K] extends { name: infer N }
+				? N extends string
+					? N
+					: never
+				: never]: Events[K] extends { properties: infer P } ? P : never;
+		}
+	: never;
+
 // Generic types for any event system
 export type AnyEventName = string;
 export type AnyEventProperties = Record<string, unknown>;

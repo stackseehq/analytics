@@ -3,18 +3,10 @@ import type {
 	AnalyticsConfig,
 	AnalyticsProvider,
 } from "@/core/events/types.js";
-import type { EventCollection } from "@/core/events/index.js";
-
-// Type to extract event map from event collection
-type EventMapFromCollection<T> = T extends EventCollection<infer Events>
-	? {
-			[K in keyof Events as Events[K] extends { name: infer N }
-				? N extends string
-					? N
-					: never
-				: never]: Events[K] extends { properties: infer P } ? P : never;
-		}
-	: never;
+import type {
+	EventCollection,
+	EventMapFromCollection,
+} from "@/core/events/index.js";
 
 export interface ServerAnalyticsConfig {
 	providers?: AnalyticsProvider[];
