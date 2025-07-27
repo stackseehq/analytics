@@ -2,17 +2,7 @@ import type { BaseEvent, EventContext } from "@/core/events/types.js";
 import { BaseAnalyticsProvider } from "@/providers/base.provider.js";
 import type { PostHogConfig } from "@/providers/posthog/types.js";
 import type { PostHog } from "posthog-js";
-
-declare global {
-	interface Window {
-		posthog?: PostHog;
-	}
-}
-
-// Helper function to check if we're in a browser environment
-function isBrowser(): boolean {
-	return typeof window !== "undefined" && typeof window.document !== "undefined";
-}
+import { isBrowser } from "@/utils/environment.js";
 
 export class PostHogClientProvider extends BaseAnalyticsProvider {
 	name = "PostHog-Client";
@@ -31,7 +21,7 @@ export class PostHogClientProvider extends BaseAnalyticsProvider {
 
 		// Check if we're in a browser environment
 		if (!isBrowser()) {
-			this.log("PostHog client provider can only be used in browser environments");
+			this.log("Skipping initialization - not in browser environment");
 			return;
 		}
 
@@ -56,7 +46,6 @@ export class PostHogClientProvider extends BaseAnalyticsProvider {
 			});
 
 			this.posthog = posthog;
-			window.posthog = posthog;
 			this.initialized = true;
 
 			this.log("Initialized successfully", this.config);
@@ -92,7 +81,8 @@ export class PostHogClientProvider extends BaseAnalyticsProvider {
 	}
 
 	page(properties?: Record<string, unknown>, context?: EventContext): void {
-		if (!this.isEnabled() || !this.initialized || !this.posthog) return;
+		if (!this.isEnabled() || !this.initialized || !this.posthog || !isBrowser())
+			return;
 
 		const pageProperties = {
 			...properties,
@@ -108,7 +98,8 @@ export class PostHogClientProvider extends BaseAnalyticsProvider {
 	}
 
 	reset(): void {
-		if (!this.isEnabled() || !this.initialized || !this.posthog) return;
+		if (!this.isEnabled() || !this.initialized || !this.posthog || !isBrowser())
+			return;
 
 		this.posthog.reset();
 		this.log("Reset user session");

@@ -5,6 +5,7 @@ import type {
 	EventCategory,
 	EventContext,
 } from "@/core/events/types.js";
+import { isBrowser } from "@/utils/environment";
 
 // Default event map type
 type DefaultEventMap = Record<string, Record<string, unknown>>;
@@ -32,6 +33,8 @@ export class BrowserAnalytics<
 	}
 
 	async initialize(): Promise<void> {
+		if (!isBrowser()) return;
+
 		if (this.initialized) return;
 
 		// If already initializing, return the existing promise
