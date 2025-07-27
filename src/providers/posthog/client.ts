@@ -9,6 +9,11 @@ declare global {
 	}
 }
 
+// Helper function to check if we're in a browser environment
+function isBrowser(): boolean {
+	return typeof window !== "undefined" && typeof window.document !== "undefined";
+}
+
 export class PostHogClientProvider extends BaseAnalyticsProvider {
 	name = "PostHog-Client";
 	private posthog?: PostHog;
@@ -23,6 +28,12 @@ export class PostHogClientProvider extends BaseAnalyticsProvider {
 	async initialize(): Promise<void> {
 		if (!this.isEnabled()) return;
 		if (this.initialized) return;
+
+		// Check if we're in a browser environment
+		if (!isBrowser()) {
+			this.log("PostHog client provider can only be used in browser environments");
+			return;
+		}
 
 		// Validate config has required fields
 		if (!this.config.apiKey || typeof this.config.apiKey !== "string") {
