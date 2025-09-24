@@ -16,6 +16,9 @@ export default defineConfig(({ mode }) => {
 				},
 				formats: ["es"],
 			},
+			rollupOptions: {
+				external: ["posthog-node", "posthog-js"],
+			},
 		},
 		resolve: {
 			alias: {
