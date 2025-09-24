@@ -26,7 +26,12 @@ export abstract class BaseAnalyticsProvider implements AnalyticsProvider {
 		context?: EventContext,
 	): Promise<void> | void;
 
-	abstract page(
+	abstract pageView(
+		properties?: Record<string, unknown>,
+		context?: EventContext,
+	): Promise<void> | void;
+
+	pageLeave?(
 		properties?: Record<string, unknown>,
 		context?: EventContext,
 	): Promise<void> | void;

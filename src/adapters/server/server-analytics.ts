@@ -84,7 +84,7 @@ export class ServerAnalytics<
 		await Promise.all(trackPromises);
 	}
 
-	page(
+	pageView(
 		properties?: Record<string, unknown>,
 		options?: {
 			context?: EventContext;
@@ -98,7 +98,27 @@ export class ServerAnalytics<
 		};
 
 		for (const provider of this.providers) {
-			provider.page(properties, context);
+			provider.pageView(properties, context);
+		}
+	}
+
+	pageLeave(
+		properties?: Record<string, unknown>,
+		options?: {
+			context?: EventContext;
+		},
+	): void {
+		if (!this.initialized) return;
+
+		const context: EventContext = {
+			...this.config.defaultContext,
+			...options?.context,
+		};
+
+		for (const provider of this.providers) {
+			if (provider.pageLeave) {
+				provider.pageLeave(properties, context);
+			}
 		}
 	}
 

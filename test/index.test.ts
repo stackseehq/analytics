@@ -7,7 +7,8 @@ describe("@stacksee/analytics exports", () => {
 		expect(Analytics.getAnalytics).toBeDefined();
 		expect(Analytics.trackClient).toBeDefined();
 		expect(Analytics.identifyClient).toBeDefined();
-		expect(Analytics.pageClient).toBeDefined();
+		expect(Analytics.pageViewClient).toBeDefined();
+		expect(Analytics.pageLeaveClient).toBeDefined();
 		expect(Analytics.resetClient).toBeDefined();
 	});
 

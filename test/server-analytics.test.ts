@@ -105,7 +105,7 @@ describe("Server Analytics", () => {
 	});
 
 	it("should track page views", () => {
-		analytics.page(
+		analytics.pageView(
 			{
 				path: "/dashboard",
 				title: "Dashboard",
@@ -120,8 +120,8 @@ describe("Server Analytics", () => {
 			},
 		);
 
-		expect(mockProvider.calls.page).toHaveLength(1);
-		const pageView = mockProvider.calls.page[0];
+		expect(mockProvider.calls.pageView).toHaveLength(1);
+		const pageView = mockProvider.calls.pageView[0];
 		expect(pageView.properties).toEqual({
 			path: "/dashboard",
 			title: "Dashboard",

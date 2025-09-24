@@ -122,10 +122,10 @@ export class BrowserAnalytics<
 		await Promise.all(trackPromises);
 	}
 
-	page(properties?: Record<string, unknown>): void {
+	pageView(properties?: Record<string, unknown>): void {
 		// Run initialization if needed, but don't block
 		this.ensureInitialized().catch((error) => {
-			console.error("[Analytics] Failed to initialize during page:", error);
+			console.error("[Analytics] Failed to initialize during pageView:", error);
 		});
 
 		// Update page context
@@ -138,7 +138,20 @@ export class BrowserAnalytics<
 		});
 
 		for (const provider of this.providers) {
-			provider.page(properties, this.context);
+			provider.pageView(properties, this.context);
+		}
+	}
+
+	pageLeave(properties?: Record<string, unknown>): void {
+		// Run initialization if needed, but don't block
+		this.ensureInitialized().catch((error) => {
+			console.error("[Analytics] Failed to initialize during pageLeave:", error);
+		});
+
+		for (const provider of this.providers) {
+			if (provider.pageLeave) {
+				provider.pageLeave(properties, this.context);
+			}
 		}
 	}
 

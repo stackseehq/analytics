@@ -22,7 +22,8 @@ export {
 	getAnalytics,
 	track as trackClient,
 	identify as identifyClient,
-	page as pageClient,
+	pageView as pageViewClient,
+	pageLeave as pageLeaveClient,
 	reset as resetClient,
 	type ClientAnalyticsConfig,
 } from "./client.js";
@@ -40,6 +41,7 @@ export {
 	PostHogClientProvider,
 	PostHogServerProvider,
 	type PostHogConfig,
+	type PostHogOptions,
 } from "./providers/index.js";
 
 // Re-export analytics classes for advanced use cases

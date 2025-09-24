@@ -68,8 +68,8 @@
     "vitest": "^2.0.3"
   },
   "optionalDependencies": {
-    "posthog-js": "^1.96.0",
-    "posthog-node": "^3.2.0"
+    "posthog-js": "^1.268.2",
+    "posthog-node": "^5.9.0"
   },
   "engines": {
     "pnpm": ">=9.0.0",

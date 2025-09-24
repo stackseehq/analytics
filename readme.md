@@ -445,6 +445,42 @@ export const POST: RequestHandler = async ({ request }) => {
 };
 ```
 
+#### Note for SvelteKit Users: Navigation Tracking
+
+If you're using SvelteKit and want to track page views and page leaves automatically with PostHog (as recommended in their documentation), add this to your root layout:
+
+```typescript
+// src/app.html or src/routes/+layout.svelte
+<script>
+  import { pageView, pageLeave } from '@stacksee/analytics/client';
+  import { beforeNavigate, afterNavigate } from '$app/navigation';
+  import { browser } from '$app/environment';
+
+  let { children } = $props():
+
+  // Only set up navigation tracking in the browser
+  if (browser) {
+    beforeNavigate(() => {
+      pageLeave();
+    });
+
+    afterNavigate(() => {
+      pageView();
+    });
+  }
+</script>
+
+<main>
+  {@render children()}
+</main>
+```
+
+This automatically tracks:
+- **Page leaves** before navigation (`$pageleave` events in PostHog)
+- **Page views** after navigation (`$pageview` events in PostHog)
+
+The tracking is framework-agnostic, so you can use similar patterns with Next.js router events, Vue Router hooks, or any other navigation system.
+
 ### Event Categories
 
 Event categories help organize your analytics data. The SDK provides predefined categories with TypeScript autocomplete:
@@ -759,7 +795,8 @@ const analytics = createClientAnalytics<typeof AppEvents>({
 #### `BrowserAnalytics<TEventMap>`
 - `track(eventName, properties): Promise<void>` - Track an event with type-safe event names and properties
 - `identify(userId, traits)` - Identify a user
-- `page(properties)` - Track a page view
+- `pageView(properties)` - Track a page view
+- `pageLeave(properties)` - Track a page leave event
 - `reset()` - Reset user session
 - `updateContext(context)` - Update event context
 
@@ -784,7 +821,8 @@ const analytics = createServerAnalytics<AppEvents>({
 #### `ServerAnalytics<TEventMap>`
 - `track(eventName, properties, options): Promise<void>` - Track an event with type-safe event names and properties
 - `identify(userId, traits)` - Identify a user
-- `page(properties, options)` - Track a page view
+- `pageView(properties, options)` - Track a page view
+- `pageLeave(properties, options)` - Track a page leave event
 - `shutdown()` - Flush pending events and cleanup
 
 ### Type Helpers

@@ -110,8 +110,15 @@ export function identify(
 /**
  * Convenience function to track page views
  */
-export function page(properties?: Record<string, unknown>): void {
-	getAnalytics().page(properties);
+export function pageView(properties?: Record<string, unknown>): void {
+	getAnalytics().pageView(properties);
+}
+
+/**
+ * Convenience function to track page leave events
+ */
+export function pageLeave(properties?: Record<string, unknown>): void {
+	getAnalytics().pageLeave(properties);
 }
 
 /**

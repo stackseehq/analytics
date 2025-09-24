@@ -1,16 +1,21 @@
 import type { BaseEvent, EventContext } from "@/core/events/types.js";
 import { BaseAnalyticsProvider } from "@/providers/base.provider.js";
-import type { PostHogConfig } from "@/providers/posthog/types.js";
-import type { PostHog } from "posthog-js";
+import type { PostHog, PostHogConfig, Properties } from "posthog-js";
 import { isBrowser } from "@/utils/environment.js";
 
 export class PostHogClientProvider extends BaseAnalyticsProvider {
 	name = "PostHog-Client";
 	private posthog?: PostHog;
 	private initialized = false;
-	private config: PostHogConfig;
+	private config: Partial<PostHogConfig> & { token: string };
 
-	constructor(config: PostHogConfig & { debug?: boolean; enabled?: boolean }) {
+	constructor(
+		config: Partial<PostHogConfig> & {
+			token: string;
+			debug?: boolean;
+			enabled?: boolean;
+		},
+	) {
 		super({ debug: config.debug, enabled: config.enabled });
 		this.config = config;
 	}
@@ -26,23 +31,19 @@ export class PostHogClientProvider extends BaseAnalyticsProvider {
 		}
 
 		// Validate config has required fields
-		if (!this.config.apiKey || typeof this.config.apiKey !== "string") {
-			throw new Error("PostHog requires an apiKey");
+		if (!this.config.token || typeof this.config.token !== "string") {
+			throw new Error("PostHog requires a token");
 		}
 
 		try {
 			// Dynamically import PostHog to avoid SSR issues
 			const { default: posthog } = await import("posthog-js");
 
-			posthog.init(this.config.apiKey, {
-				api_host: this.config.host || "https://app.posthog.com",
-				autocapture: this.config.autocapture ?? false,
-				capture_pageview: this.config.capturePageview ?? false,
-				capture_pageleave: this.config.capturePageleave ?? false,
-				debug: this.config.debug ?? this.debug,
-				disable_cookie: this.config.disableCookie ?? false,
-				persistence: this.config.persistenceType ?? "localStorage",
-				person_profiles: this.config.personProfiles ?? "identified_only",
+			const { token, debug: configDebug, ...posthogConfig } = this.config;
+
+			posthog.init(token, {
+				...posthogConfig,
+				debug: configDebug ?? this.debug,
 			});
 
 			this.posthog = posthog;
@@ -80,7 +81,7 @@ export class PostHogClientProvider extends BaseAnalyticsProvider {
 		this.log("Tracked event", { event, context });
 	}
 
-	page(properties?: Record<string, unknown>, context?: EventContext): void {
+	pageView(properties?: Record<string, unknown>, context?: EventContext): void {
 		if (!this.isEnabled() || !this.initialized || !this.posthog || !isBrowser())
 			return;
 
@@ -91,10 +92,30 @@ export class PostHogClientProvider extends BaseAnalyticsProvider {
 				title: context.page.title,
 				referrer: context.page.referrer,
 			}),
-		};
+		} satisfies Properties;
 
 		this.posthog.capture("$pageview", pageProperties);
 		this.log("Tracked page view", { properties, context });
+	}
+
+	pageLeave(
+		properties?: Record<string, unknown>,
+		context?: EventContext,
+	): void {
+		if (!this.isEnabled() || !this.initialized || !this.posthog || !isBrowser())
+			return;
+
+		const pageLeaveProperties = {
+			...properties,
+			...(context?.page && {
+				path: context.page.path,
+				title: context.page.title,
+				referrer: context.page.referrer,
+			}),
+		} satisfies Properties;
+
+		this.posthog.capture("$pageleave", pageLeaveProperties);
+		this.log("Tracked page leave", { properties, context });
 	}
 
 	reset(): void {

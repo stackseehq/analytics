@@ -1,15 +1,14 @@
 import type { BaseEvent, EventContext } from "@/core/events/types.js";
 import { BaseAnalyticsProvider } from "@/providers/base.provider.js";
-import type { PostHogConfig } from "@/providers/posthog/types.js";
-import { PostHog } from "posthog-node";
+import { PostHog, type PostHogOptions } from "posthog-node";
 
 export class PostHogServerProvider extends BaseAnalyticsProvider {
 	name = "PostHog-Server";
 	private client?: PostHog;
 	private initialized = false;
-	private config: PostHogConfig;
+	private config: { apiKey: string } & PostHogOptions;
 
-	constructor(config: PostHogConfig & { debug?: boolean; enabled?: boolean }) {
+	constructor(config: { apiKey: string } & PostHogOptions & { debug?: boolean; enabled?: boolean }) {
 		super({ debug: config.debug, enabled: config.enabled });
 		this.config = config;
 	}
@@ -24,10 +23,13 @@ export class PostHogServerProvider extends BaseAnalyticsProvider {
 		}
 
 		try {
-			this.client = new PostHog(this.config.apiKey, {
-				host: this.config.host || "https://app.posthog.com",
+			const { apiKey, ...posthogOptions } = this.config;
+			
+			this.client = new PostHog(apiKey, {
+				host: "https://app.posthog.com",
 				flushAt: 20,
 				flushInterval: 10000,
+				...posthogOptions,
 			});
 
 			this.initialized = true;
@@ -75,7 +77,7 @@ export class PostHogServerProvider extends BaseAnalyticsProvider {
 		this.log("Tracked event", { event, context });
 	}
 
-	page(properties?: Record<string, unknown>, context?: EventContext): void {
+	pageView(properties?: Record<string, unknown>, context?: EventContext): void {
 		if (!this.isEnabled() || !this.initialized || !this.client) return;
 
 		const pageProperties = {

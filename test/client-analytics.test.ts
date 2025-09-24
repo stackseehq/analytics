@@ -122,15 +122,15 @@ describe("Client Analytics", () => {
 	});
 
 	it("should track page views with updated context", async () => {
-		analytics.page({
+		analytics.pageView({
 			customProp: "value",
 		});
 
 		// Wait for async initialization
 		await new Promise((resolve) => setTimeout(resolve, 10));
 
-		expect(mockProvider.calls.page).toHaveLength(1);
-		const pageView = mockProvider.calls.page[0];
+		expect(mockProvider.calls.pageView).toHaveLength(1);
+		const pageView = mockProvider.calls.pageView[0];
 		expect(pageView.properties).toEqual({
 			customProp: "value",
 		});

@@ -5,7 +5,8 @@ export {
 	getAnalytics,
 	track,
 	identify,
-	page,
+	pageView,
+	pageLeave,
 	reset,
 	type ClientAnalyticsConfig,
 } from "@/client.js";
@@ -14,7 +15,7 @@ export { BrowserAnalytics } from "@/adapters/client/browser-analytics.js";
 
 // Client-side providers
 export { PostHogClientProvider } from "@/providers/posthog/client.js";
-export type { PostHogConfig } from "@/providers/posthog/types.js";
+export type { PostHogConfig } from "posthog-js";
 
 // Base provider for creating custom providers
 export { BaseAnalyticsProvider } from "@/providers/base.provider.js";
@@ -26,7 +27,7 @@ export type {
 	EventContext,
 	AnalyticsProvider,
 	AnalyticsConfig,
-} from "../core/events/types.js";
+} from "@/core/events/types.js";
 
 export type {
 	CreateEventDefinition,

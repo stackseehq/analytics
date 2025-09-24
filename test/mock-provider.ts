@@ -10,7 +10,11 @@ export class MockAnalyticsProvider extends BaseAnalyticsProvider {
 		initialize: number;
 		identify: Array<{ userId: string; traits?: Record<string, unknown> }>;
 		track: Array<{ event: BaseEvent; context?: EventContext }>;
-		page: Array<{
+		pageView: Array<{
+			properties?: Record<string, unknown>;
+			context?: EventContext;
+		}>;
+		pageLeave: Array<{
 			properties?: Record<string, unknown>;
 			context?: EventContext;
 		}>;
@@ -19,7 +23,8 @@ export class MockAnalyticsProvider extends BaseAnalyticsProvider {
 		initialize: 0,
 		identify: [],
 		track: [],
-		page: [],
+		pageView: [],
+		pageLeave: [],
 		reset: 0,
 	};
 
@@ -41,10 +46,16 @@ export class MockAnalyticsProvider extends BaseAnalyticsProvider {
 		this.log("Tracked event", { event, context });
 	}
 
-	page(properties?: Record<string, unknown>, context?: EventContext): void {
+	pageView(properties?: Record<string, unknown>, context?: EventContext): void {
 		if (!this.isEnabled() || !this.initialized) return;
-		this.calls.page.push({ properties, context });
+		this.calls.pageView.push({ properties, context });
 		this.log("Tracked page view", { properties, context });
+	}
+
+	pageLeave(properties?: Record<string, unknown>, context?: EventContext): void {
+		if (!this.isEnabled() || !this.initialized) return;
+		this.calls.pageLeave.push({ properties, context });
+		this.log("Tracked page leave", { properties, context });
 	}
 
 	reset(): void {
@@ -59,7 +70,8 @@ export class MockAnalyticsProvider extends BaseAnalyticsProvider {
 			initialize: 0,
 			identify: [],
 			track: [],
-			page: [],
+			pageView: [],
+			pageLeave: [],
 			reset: 0,
 		};
 	}

@@ -47,7 +47,11 @@ export interface AnalyticsProvider {
 		traits?: Record<string, unknown>,
 	): Promise<void> | void;
 	track(event: BaseEvent, context?: EventContext): Promise<void> | void;
-	page(
+	pageView(
+		properties?: Record<string, unknown>,
+		context?: EventContext,
+	): Promise<void> | void;
+	pageLeave?(
 		properties?: Record<string, unknown>,
 		context?: EventContext,
 	): Promise<void> | void;
