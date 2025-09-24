@@ -97,7 +97,7 @@ Tip: If you have a lot of events, you can also divide your events into multiple 
 
 ```typescript
 import { createClientAnalytics } from '@stacksee/analytics/client';
-import { PostHogClientProvider } from '@stacksee/analytics/providers/posthog';
+import { PostHogClientProvider } from '@stacksee/analytics/providers/client';
 import type { AppEvents } from './events';
 
 // Initialize analytics with providers as plugins
@@ -138,7 +138,7 @@ analytics.identify('user-123', {
 
 ```typescript
 import { createServerAnalytics } from '@stacksee/analytics/server';
-import { PostHogServerProvider } from '@stacksee/analytics/providers/posthog';
+import { PostHogServerProvider } from '@stacksee/analytics/providers/server';
 import type { AppEvents } from './events';
 
 // Create analytics instance with providers as plugins
@@ -268,7 +268,7 @@ Here's a complete example using Svelte 5 that demonstrates both client and serve
 ```typescript
 // src/lib/config/analytics.ts
 import { createClientAnalytics } from '@stacksee/analytics/client';
-import { PostHogClientProvider } from '@stacksee/analytics/providers/posthog';
+import { PostHogClientProvider } from '@stacksee/analytics/providers/client';
 import { PUBLIC_POSTHOG_API_KEY, PUBLIC_POSTHOG_HOST } from '$env/static/public';
 
 // Define your events for the waitlist
@@ -306,7 +306,7 @@ export const clientAnalytics = createClientAnalytics<AppEvents>({
 ```typescript
 // src/lib/server/analytics.ts
 import { createServerAnalytics } from '@stacksee/analytics/server';
-import { PostHogServerProvider } from '@stacksee/analytics/providers/posthog';
+import { PostHogServerProvider } from '@stacksee/analytics/providers/server';
 import { AppEvents } from '$lib/config/analytics'; // Import AppEvents
 import { PUBLIC_POSTHOG_API_KEY, PUBLIC_POSTHOG_HOST } from '$env/static/public';
 
@@ -564,6 +564,12 @@ const analytics = await createClientAnalytics<typeof AppEvents>({
 
 ### Client-Only and Server-Only Providers
 
+**Important**: To avoid bundling Node.js dependencies in your client code, always use the environment-specific provider imports:
+
+- **Client-side**: `@stacksee/analytics/providers/client` - Only includes browser-compatible providers
+- **Server-side**: `@stacksee/analytics/providers/server` - Only includes Node.js providers  
+- **Both**: `@stacksee/analytics/providers` - Includes all providers (may cause bundling issues in browsers)
+
 Some analytics libraries are designed to work only in specific environments. For example:
 - **Client-only**: Google Analytics (gtag.js), Hotjar, FullStory
 - **Server-only**: Some enterprise analytics APIs that require secret keys
@@ -638,7 +644,7 @@ The plugin architecture makes it easy to send events to multiple analytics servi
 
 ```typescript
 import { createClientAnalytics } from '@stacksee/analytics/client';
-import { PostHogClientProvider } from '@stacksee/analytics/providers/posthog';
+import { PostHogClientProvider } from '@stacksee/analytics/providers/client';
 // Import your custom providers
 import { GoogleAnalyticsProvider } from './providers/google-analytics';
 import { MixpanelProvider } from './providers/mixpanel';

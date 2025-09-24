@@ -1,10 +1,17 @@
 import { describe, it, expect } from "vitest";
-import * as Providers from "@/providers/index";
+import * as ClientProviders from "@/providers/client";
+import * as ServerProviders from "@/providers/server";
 
 describe("@stacksee/analytics/providers exports", () => {
-	it("should export all provider classes", () => {
-		expect(Providers.BaseAnalyticsProvider).toBeDefined();
-		expect(Providers.PostHogClientProvider).toBeDefined();
-		expect(Providers.PostHogServerProvider).toBeDefined();
+	it("should export only client-safe providers from client entry", () => {
+		expect(ClientProviders.BaseAnalyticsProvider).toBeDefined();
+		expect(ClientProviders.PostHogClientProvider).toBeDefined();
+		expect((ClientProviders as Record<string, unknown>).PostHogServerProvider).toBeUndefined();
+	});
+
+	it("should export only server providers from server entry", () => {
+		expect(ServerProviders.BaseAnalyticsProvider).toBeDefined();
+		expect(ServerProviders.PostHogServerProvider).toBeDefined();
+		expect((ServerProviders as Record<string, unknown>).PostHogClientProvider).toBeUndefined();
 	});
 });

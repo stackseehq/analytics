@@ -1,6 +1,6 @@
 {
   "name": "@stacksee/analytics",
-  "version": "0.4.3",
+  "version": "0.4.4",
   "description": "A highly typed, provider-agnostic analytics library for TypeScript applications",
   "type": "module",
   "exports": {
@@ -16,9 +16,13 @@
       "types": "./dist/server.d.ts",
       "import": "./dist/server.js"
     },
-    "./providers": {
-      "types": "./dist/providers.d.ts",
-      "import": "./dist/providers.js"
+    "./providers/client": {
+      "types": "./dist/providers/client.d.ts",
+      "import": "./dist/providers/client.js"
+    },
+    "./providers/server": {
+      "types": "./dist/providers/server.d.ts",
+      "import": "./dist/providers/server.js"
     }
   },
   "main": "./dist/index.js",
