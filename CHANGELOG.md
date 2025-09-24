@@ -1,5 +1,11 @@
 # @stacksee/analytics
 
+## 0.4.2
+
+### Patch Changes
+
+- Fix build configuration to properly handle Node.js modules by externalizing posthog dependencies ([`3fbd302`](https://github.com/stackseehq/analytics/commit/3fbd30279e8b0fbde9ec26c3c25b98b6decb551e))
+
 ## 0.2.0
 
 ### Minor Changes
