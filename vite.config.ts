@@ -33,6 +33,10 @@ export default defineConfig(({ mode }) => {
 			// generate typescript types
 			dts({
 				insertTypesEntry: true,
+				copyDtsFiles: false,
+				compilerOptions: {
+					removeComments: false,
+				},
 			}),
 		],
 		define: {
