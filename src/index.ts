@@ -28,21 +28,15 @@ export {
 	type ClientAnalyticsConfig,
 } from "./client.js";
 
-// Server exports
-export {
-	createServerAnalytics,
-	ServerAnalytics,
-	type ServerAnalyticsConfig,
-} from "./server.js";
+// Note: Server exports are available at @stacksee/analytics/server
+// to avoid Node.js dependencies when importing from main entry point
 
-// Provider exports
+// Client provider exports (server providers available at @stacksee/analytics/providers)
 export {
 	BaseAnalyticsProvider,
 	PostHogClientProvider,
-	PostHogServerProvider,
 	type PostHogConfig,
-	type PostHogOptions,
-} from "./providers/index.js";
+} from "./providers/client.js";
 
 // Re-export analytics classes for advanced use cases
 export { BrowserAnalytics } from "./adapters/client/browser-analytics.js";

@@ -15,7 +15,14 @@ export function isBrowser(): boolean {
  * @returns true if running in Node.js, false otherwise
  */
 export function isNode(): boolean {
-	return typeof process !== "undefined" && process.versions && !!process.versions.node;
+	try {
+		return typeof process !== "undefined" && 
+			   typeof process.versions === "object" && 
+			   process.versions !== null && 
+			   !!process.versions.node;
+	} catch {
+		return false;
+	}
 }
 
 /**

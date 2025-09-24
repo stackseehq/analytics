@@ -12,15 +12,10 @@ describe("@stacksee/analytics exports", () => {
 		expect(Analytics.resetClient).toBeDefined();
 	});
 
-	it("should export server analytics functions", () => {
-		expect(Analytics.createServerAnalytics).toBeDefined();
-		expect(Analytics.ServerAnalytics).toBeDefined();
-	});
-
-	it("should export provider classes", () => {
+	it("should export provider classes (client only)", () => {
 		expect(Analytics.BaseAnalyticsProvider).toBeDefined();
 		expect(Analytics.PostHogClientProvider).toBeDefined();
-		expect(Analytics.PostHogServerProvider).toBeDefined();
+		// Note: PostHogServerProvider is now in @stacksee/analytics/providers
 	});
 
 	it("should export analytics classes", () => {
