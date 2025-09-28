@@ -10,8 +10,8 @@ export default defineConfig(({ mode }) => {
 			lib: {
 				entry: {
 					index: resolve(__dirname, "src/index.ts"),
-					client: resolve(__dirname, "src/client.ts"),
-					server: resolve(__dirname, "src/server.ts"),
+					client: resolve(__dirname, "src/client/index.ts"),
+					server: resolve(__dirname, "src/server/index.ts"),
 					"providers/client": resolve(__dirname, "src/providers/client.ts"),
 					"providers/server": resolve(__dirname, "src/providers/server.ts"),
 				},
@@ -36,8 +36,14 @@ export default defineConfig(({ mode }) => {
 			dts({
 				insertTypesEntry: true,
 				copyDtsFiles: false,
+				exclude: ["test/**/*", "**/*.test.ts"],
+				include: ["src/**/*"],
+				entryRoot: "src",
+				outDir: "dist",
 				compilerOptions: {
 					removeComments: false,
+					declaration: true,
+					emitDeclarationOnly: true,
 				},
 			}),
 		],
