@@ -28,7 +28,7 @@ const TestEvents = {
 
 describe("Server Analytics", () => {
 	let mockProvider: MockAnalyticsProvider;
-	let analytics: ServerAnalytics;
+	let analytics: ReturnType<typeof createServerAnalytics>;
 
 	beforeEach(() => {
 		mockProvider = new MockAnalyticsProvider({ debug: false, enabled: true });

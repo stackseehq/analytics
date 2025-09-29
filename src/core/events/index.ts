@@ -37,7 +37,7 @@ export type EventMapFromCollection<T> = T extends EventCollection<infer Events>
 					: never
 				: never]: Events[K] extends { properties: infer P } ? P : never;
 		}
-	: never;
+	: Record<string, Record<string, unknown>>;
 
 // Generic types for any event system
 export type AnyEventName = string;
