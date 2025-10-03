@@ -1,6 +1,6 @@
 # @stacksee/analytics
 
-A highly typed, provider-agnostic analytics library for TypeScript applications. Works seamlessly on both client and server sides with full type safety for your custom events.
+A highly typed, zero-dependency, provider-agnostic analytics library for TypeScript applications. Works seamlessly on both client and server sides with full type safety for your custom events.
 
 ## Table of Contents
 
@@ -39,9 +39,9 @@ A highly typed, provider-agnostic analytics library for TypeScript applications.
 - 🎯 **Type-safe events**: Define your own strongly typed events with full IntelliSense support
 - 🔌 **Plugin architecture**: Easily add analytics providers by passing them as plugins
 - 🌐 **Universal**: Same API works on both client (browser) and server (Node.js)
-- 📦 **Lightweight**: Zero dependencies on the core library
-- 🏗️ **Framework agnostic**: Use with any JavaScript framework
-- 🌎 **Edge ready**: The server client is compatible with edge runtime (e.g. Cloudflare Workers)
+- 👤 **User context**: Automatically attach user data (email, traits) to all events
+- 🏗️ **Framework agnostic**: Use with any JavaScript framework. Can also be used only on the client.
+- 🌎 **Edge ready**: The server client is compatible with edge runtime (e.g. Cloudflare Workers, Vercel Edge functions)
 - 🔧 **Extensible**: Simple interface to add new providers
 
 ## Installation
@@ -126,12 +126,19 @@ analytics.track('user_signed_up', {
 // analytics.track('wrong_event', {}); // ❌ Error: Argument of type '"wrong_event"' is not assignable
 // analytics.track('user_signed_up', { wrongProp: 'value' }); // ❌ Error: Object literal may only specify known properties
 
-// Identify users
+// Identify users - user context is automatically included in all subsequent events
 analytics.identify('user-123', {
   email: 'user@example.com',
   name: 'John Doe',
   plan: 'pro'
 });
+
+// Now all tracked events automatically include user context
+analytics.track('feature_used', {
+  featureName: 'export-data',
+  userId: 'user-123'
+});
+// Providers receive: context.user = { userId: 'user-123', email: 'user@example.com', traits: {...} }
 ```
 
 ### 3. Server-Side Usage
@@ -155,23 +162,200 @@ const analytics = createServerAnalytics<AppEvents>({
   enabled: true
 });
 
-// Track events - now returns a Promise with full type safety
+// Track events with user context - now returns a Promise with full type safety
 await analytics.track('feature_used', {
   featureName: 'export-data',
   userId: 'user-123',
   duration: 1500
 }, {
   userId: 'user-123',
+  user: {
+    email: 'user@example.com',
+    traits: {
+      plan: 'pro',
+      company: 'Acme Corp'
+    }
+  },
   context: {
     page: {
       path: '/api/export',
     }
   }
 });
+// Providers receive: context.user = { userId: 'user-123', email: 'user@example.com', traits: {...} }
 
 // Important: Always call shutdown when done, some providers such as Posthog require flushing events.
 await analytics.shutdown();
 ```
+
+## User Context
+
+The library automatically manages user context, making it easy to include user data (email, traits) in all your analytics events. This is especially useful for providers like Loops or Intercom that require user identifiers.
+
+### How It Works
+
+**Client-Side (Stateful):**
+```typescript
+// 1. Identify the user once (typically after login)
+analytics.identify('user-123', {
+  email: 'user@example.com',
+  name: 'John Doe',
+  plan: 'pro',
+  company: 'Acme Corp'
+});
+
+// 2. Track events - user context is automatically included
+analytics.track('button_clicked', { buttonId: 'checkout' });
+
+// Behind the scenes, providers receive:
+// {
+//   event: { action: 'button_clicked', ... },
+//   context: {
+//     user: {
+//       userId: 'user-123',
+//       email: 'user@example.com',
+//       traits: { email: '...', name: '...', plan: '...', company: '...' }
+//     }
+//   }
+// }
+
+// 3. Reset on logout to clear user context
+analytics.reset();
+```
+
+**Server-Side (Stateless):**
+```typescript
+// Pass user context with each track call
+await analytics.track('api_request', {
+  endpoint: '/users',
+  method: 'POST'
+}, {
+  userId: 'user-123',
+  user: {
+    email: 'user@example.com',
+    traits: {
+      plan: 'pro',
+      company: 'Acme Corp'
+    }
+  }
+});
+
+// Alternatively, pass via context.user
+await analytics.track('api_request', { ... }, {
+  userId: 'user-123',
+  context: {
+    user: {
+      email: 'user@example.com'
+    }
+  }
+});
+```
+
+### Using User Context in Custom Providers
+
+When building custom providers, you can access user context from the `EventContext`:
+
+```typescript
+export class LoopsProvider extends BaseAnalyticsProvider {
+  name = 'Loops';
+
+  async track(event: BaseEvent, context?: EventContext): Promise<void> {
+    // Access user data from context
+    const email = context?.user?.email;
+    const userId = context?.user?.userId;
+    const traits = context?.user?.traits;
+
+    // Loops requires either email or userId
+    if (!email && !userId) {
+      this.log('Skipping event - Loops requires email or userId');
+      return;
+    }
+
+    await this.loops.sendEvent({
+      ...(email && { email }),
+      ...(userId && { userId }),
+      eventName: event.action,
+      eventProperties: event.properties,
+      // Optionally include all user traits
+      contactProperties: traits,
+    });
+  }
+}
+```
+
+### Security & Privacy
+
+User context is handled securely:
+
+- ✅ **Memory-only storage** - No localStorage, cookies, or persistence
+- ✅ **Session-scoped** - Cleared on `reset()` (logout)
+- ✅ **Provider-controlled** - Only sent to providers you configure
+- ✅ **No cross-session leaks** - Fresh state on each page load
+
+### Type-Safe User Traits
+
+You can define a custom interface for your user traits to get full type safety:
+
+```typescript
+// Define your user traits interface
+interface UserTraits {
+  email: string;
+  name: string;
+  plan: 'free' | 'pro' | 'enterprise';
+  company?: string;
+  role?: 'admin' | 'user' | 'viewer';
+}
+
+// Client-side with typed traits
+const analytics = createClientAnalytics<typeof AppEvents, UserTraits>({
+  providers: [/* ... */]
+});
+
+// Now identify() and traits are fully typed!
+analytics.identify('user-123', {
+  email: 'user@example.com',
+  name: 'John Doe',
+  plan: 'pro',  // ✅ Autocomplete works!
+  company: 'Acme Corp',
+  role: 'admin'
+});
+
+// TypeScript will error on invalid trait values
+analytics.identify('user-123', {
+  plan: 'invalid'  // ❌ Error: Type '"invalid"' is not assignable to type 'free' | 'pro' | 'enterprise'
+});
+
+// Server-side with typed traits
+const serverAnalytics = createServerAnalytics<typeof AppEvents, UserTraits>({
+  providers: [/* ... */]
+});
+
+await serverAnalytics.track('event', {}, {
+  user: {
+    email: 'user@example.com',
+    plan: 'pro',  // ✅ Fully typed!
+    traits: {
+      company: 'Acme Corp'
+    }
+  }
+});
+```
+
+**Benefits:**
+- ✅ Full IntelliSense/autocomplete for user traits
+- ✅ Compile-time type checking prevents typos
+- ✅ Self-documenting code
+- ✅ Refactoring safety
+
+### Client vs Server Differences
+
+| Feature | Client (Browser) | Server (Node.js) |
+|---------|------------------|------------------|
+| **State Management** | Stateful - persists after `identify()` | Stateless - pass per request |
+| **Usage Pattern** | Call `identify()` once, track many times | Pass `user` option with each `track()` |
+| **Reset** | Call `reset()` on logout | No reset needed (stateless) |
+| **Use Case** | Single user per session | Multiple users per instance |
+| **Type Safety** | `createClientAnalytics<Events, Traits>` | `createServerAnalytics<Events, Traits>` |
 
 ### Async Tracking: When to await vs fire-and-forget
 
@@ -567,7 +751,7 @@ const analytics = await createClientAnalytics<typeof AppEvents>({
 **Important**: To avoid bundling Node.js dependencies in your client code, always use the environment-specific provider imports:
 
 - **Client-side**: `@stacksee/analytics/providers/client` - Only includes browser-compatible providers
-- **Server-side**: `@stacksee/analytics/providers/server` - Only includes Node.js providers  
+- **Server-side**: `@stacksee/analytics/providers/server` - Only includes Node.js providers
 - **Both**: `@stacksee/analytics/providers` - Includes all providers (may cause bundling issues in browsers)
 
 Some analytics libraries are designed to work only in specific environments. For example:
@@ -799,11 +983,11 @@ const analytics = createClientAnalytics<typeof AppEvents>({
 ```
 
 #### `BrowserAnalytics<TEventMap>`
-- `track(eventName, properties): Promise<void>` - Track an event with type-safe event names and properties
-- `identify(userId, traits)` - Identify a user
+- `track(eventName, properties): Promise<void>` - Track an event with type-safe event names and properties. User context from `identify()` is automatically included.
+- `identify(userId, traits)` - Identify a user and store their traits. All subsequent `track()` calls will include this user context.
 - `pageView(properties)` - Track a page view
 - `pageLeave(properties)` - Track a page leave event
-- `reset()` - Reset user session
+- `reset()` - Reset user session, clearing userId and user traits
 - `updateContext(context)` - Update event context
 
 ### Server API
@@ -825,8 +1009,12 @@ const analytics = createServerAnalytics<AppEvents>({
 ```
 
 #### `ServerAnalytics<TEventMap>`
-- `track(eventName, properties, options): Promise<void>` - Track an event with type-safe event names and properties
-- `identify(userId, traits)` - Identify a user
+- `track(eventName, properties, options): Promise<void>` - Track an event with type-safe event names and properties. Pass user context via `options.user` or `options.context.user`.
+  - `options.userId` - User ID for this event
+  - `options.sessionId` - Session ID for this event
+  - `options.user` - User context (email, traits) for this event
+  - `options.context` - Additional event context (page, device, etc.)
+- `identify(userId, traits)` - Identify a user (sends to providers but doesn't persist on server)
 - `pageView(properties, options)` - Track a page view
 - `pageLeave(properties, options)` - Track a page leave event
 - `shutdown()` - Flush pending events and cleanup

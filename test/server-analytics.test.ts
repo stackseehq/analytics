@@ -86,6 +86,90 @@ describe("Server Analytics", () => {
 		expect(trackedEvent.context?.page?.path).toBe("/api/export");
 	});
 
+	it("should accept user data in track options via user field", async () => {
+		await analytics.track(
+			"test_event",
+			{
+				action: "clicked",
+			},
+			{
+				userId: "user-123",
+				user: {
+					userId: "user-123",
+					email: "test@example.com",
+					traits: {
+						plan: "pro",
+						name: "Test User",
+					},
+				},
+			},
+		);
+
+		expect(mockProvider.calls.track).toHaveLength(1);
+		const trackedEvent = mockProvider.calls.track[0];
+		expect(trackedEvent.context?.user).toEqual({
+			userId: "user-123",
+			email: "test@example.com",
+			traits: {
+				plan: "pro",
+				name: "Test User",
+			},
+		});
+	});
+
+	it("should accept user data via context.user field", async () => {
+		await analytics.track(
+			"test_event",
+			{
+				action: "clicked",
+			},
+			{
+				userId: "user-123",
+				context: {
+					user: {
+						userId: "user-123",
+						email: "user@example.com",
+					},
+					page: {
+						path: "/dashboard",
+					},
+				},
+			},
+		);
+
+		expect(mockProvider.calls.track).toHaveLength(1);
+		const trackedEvent = mockProvider.calls.track[0];
+		expect(trackedEvent.context?.user).toEqual({
+			userId: "user-123",
+			email: "user@example.com",
+		});
+		expect(trackedEvent.context?.page?.path).toBe("/dashboard");
+	});
+
+	it("should prioritize user field over context.user", async () => {
+		await analytics.track(
+			"test_event",
+			{
+				action: "clicked",
+			},
+			{
+				userId: "user-123",
+				user: {
+					email: "priority@example.com",
+				},
+				context: {
+					user: {
+						email: "fallback@example.com",
+					},
+				},
+			},
+		);
+
+		expect(mockProvider.calls.track).toHaveLength(1);
+		const trackedEvent = mockProvider.calls.track[0];
+		expect(trackedEvent.context?.user?.email).toBe("priority@example.com");
+	});
+
 	it("should identify users", () => {
 		analytics.identify("user-123", {
 			email: "test@example.com",

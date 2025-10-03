@@ -66,10 +66,13 @@ export class PostHogServerProvider extends BaseAnalyticsProvider {
 			}),
 			...(context?.device && { device: context.device }),
 			...(context?.utm && { utm: context.utm }),
+			// Include user email and traits as regular event properties
+			...(context?.user?.email && { user_email: context.user.email }),
+			...(context?.user?.traits && { user_traits: context.user.traits }),
 		};
 
 		this.client.capture({
-			distinctId: event.userId || "anonymous",
+			distinctId: event.userId || context?.user?.userId || "anonymous",
 			event: event.action,
 			properties,
 		});

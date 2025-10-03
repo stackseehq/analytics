@@ -121,6 +121,47 @@ describe("Client Analytics", () => {
 		expect(trackedEvent.event.userId).toBe("user-123");
 	});
 
+	it("should store user traits from identify and include in track context", async () => {
+		analytics.identify("user-123", {
+			email: "test@example.com",
+			name: "Test User",
+			plan: "pro",
+		});
+
+		// Wait for async initialization
+		await new Promise((resolve) => setTimeout(resolve, 10));
+
+		// Track event after identify
+		await analytics.track("test_event", { test: true });
+
+		const trackedEvent = mockProvider.calls.track[0];
+		expect(trackedEvent.context?.user).toEqual({
+			userId: "user-123",
+			email: "test@example.com",
+			traits: {
+				email: "test@example.com",
+				name: "Test User",
+				plan: "pro",
+			},
+		});
+	});
+
+	it("should include user context when only userId is provided", async () => {
+		analytics.identify("user-456");
+
+		// Wait for async initialization
+		await new Promise((resolve) => setTimeout(resolve, 10));
+
+		await analytics.track("test_event", { test: true });
+
+		const trackedEvent = mockProvider.calls.track[0];
+		expect(trackedEvent.context?.user).toEqual({
+			userId: "user-456",
+			email: undefined,
+			traits: undefined,
+		});
+	});
+
 	it("should track page views with updated context", async () => {
 		analytics.pageView({
 			customProp: "value",
@@ -158,6 +199,38 @@ describe("Client Analytics", () => {
 
 		// Should have new session ID and no user ID
 		expect(afterReset.event.sessionId).not.toBe(initialSessionId);
+		expect(afterReset.event.userId).toBeUndefined();
+	});
+
+	it("should clear user traits on reset", async () => {
+		// Identify user with traits
+		analytics.identify("user-123", {
+			email: "test@example.com",
+			name: "Test User",
+		});
+
+		// Wait for async initialization
+		await new Promise((resolve) => setTimeout(resolve, 10));
+
+		// Track before reset - should have user context
+		await analytics.track("before_reset", {});
+		const beforeReset = mockProvider.calls.track[0];
+		expect(beforeReset.context?.user).toEqual({
+			userId: "user-123",
+			email: "test@example.com",
+			traits: {
+				email: "test@example.com",
+				name: "Test User",
+			},
+		});
+
+		// Reset
+		analytics.reset();
+
+		// Track after reset - should have no user context
+		await analytics.track("after_reset", {});
+		const afterReset = mockProvider.calls.track[1];
+		expect(afterReset.context?.user).toBeUndefined();
 		expect(afterReset.event.userId).toBeUndefined();
 	});
 

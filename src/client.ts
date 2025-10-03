@@ -5,10 +5,10 @@ import type {
 } from "@/core/events/types.js";
 import type { EventMapFromCollection } from "@/core/events/index.js";
 
-// Default event map type
-type DefaultEventMap = Record<string, Record<string, unknown>>;
-
-let analyticsInstance: BrowserAnalytics<DefaultEventMap> | null = null;
+let analyticsInstance: BrowserAnalytics<
+	Record<string, Record<string, unknown>>,
+	Record<string, unknown>
+> | null = null;
 
 export interface ClientAnalyticsConfig {
 	providers?: AnalyticsProvider[];
@@ -44,13 +44,17 @@ export interface ClientAnalyticsConfig {
  * });
  * ```
  */
-export function createClientAnalytics<TEvents = never>(
+export function createClientAnalytics<
+	TEvents = never,
+	TUserTraits extends Record<string, unknown> = Record<string, unknown>,
+>(
 	config: ClientAnalyticsConfig,
-): BrowserAnalytics<EventMapFromCollection<TEvents>> {
+): BrowserAnalytics<EventMapFromCollection<TEvents>, TUserTraits> {
 	if (analyticsInstance) {
 		console.warn("[Analytics] Already initialized");
 		return analyticsInstance as BrowserAnalytics<
-			EventMapFromCollection<TEvents>
+			EventMapFromCollection<TEvents>,
+			TUserTraits
 		>;
 	}
 
@@ -60,16 +64,23 @@ export function createClientAnalytics<TEvents = never>(
 		enabled: config.enabled,
 	};
 
-	analyticsInstance = new BrowserAnalytics<EventMapFromCollection<TEvents>>(
-		analyticsConfig,
-	);
+	analyticsInstance = new BrowserAnalytics<
+		EventMapFromCollection<TEvents>,
+		TUserTraits
+	>(analyticsConfig) as BrowserAnalytics<
+		Record<string, Record<string, unknown>>,
+		Record<string, unknown>
+	>;
 
 	// Auto-initialize in the background without blocking
 	analyticsInstance.initialize().catch((error) => {
 		console.error("[Analytics] Failed to initialize:", error);
 	});
 
-	return analyticsInstance;
+	return analyticsInstance as BrowserAnalytics<
+		EventMapFromCollection<TEvents>,
+		TUserTraits
+	>;
 }
 
 // Convenience export for backwards compatibility
@@ -78,7 +89,10 @@ export { createClientAnalytics as createAnalytics };
 /**
  * Get the current analytics instance
  */
-export function getAnalytics(): BrowserAnalytics<DefaultEventMap> {
+export function getAnalytics(): BrowserAnalytics<
+	Record<string, Record<string, unknown>>,
+	Record<string, unknown>
+> {
 	if (!analyticsInstance) {
 		throw new Error(
 			"[Analytics] Not initialized. Call createAnalytics() first.",

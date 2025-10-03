@@ -21,7 +21,18 @@ export interface BaseEvent {
 	properties?: Record<string, unknown>;
 }
 
-export interface EventContext {
+export interface UserContext<
+	TTraits extends Record<string, unknown> = Record<string, unknown>,
+> {
+	userId?: string;
+	email?: string;
+	traits?: TTraits;
+}
+
+export interface EventContext<
+	TTraits extends Record<string, unknown> = Record<string, unknown>,
+> {
+	user?: UserContext<TTraits>;
 	page?: {
 		path: string;
 		title?: string;

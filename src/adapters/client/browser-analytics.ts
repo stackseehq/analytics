@@ -12,11 +12,13 @@ type DefaultEventMap = Record<string, Record<string, unknown>>;
 
 export class BrowserAnalytics<
 	TEventMap extends DefaultEventMap = DefaultEventMap,
+	TUserTraits extends Record<string, unknown> = Record<string, unknown>,
 > {
 	private providers: AnalyticsProvider[] = [];
-	private context: EventContext = {};
+	private context: EventContext<TUserTraits> = {};
 	private userId?: string;
 	private sessionId?: string;
+	private userTraits?: TUserTraits;
 	private initialized = false;
 	private initializePromise?: Promise<void>;
 
@@ -55,7 +57,7 @@ export class BrowserAnalytics<
 
 		// Set default context
 		if (config.defaultContext) {
-			this.context = { ...config.defaultContext };
+			this.context = { ...config.defaultContext } as EventContext<TUserTraits>;
 		}
 
 		// Generate session ID
@@ -138,26 +140,31 @@ export class BrowserAnalytics<
 
 	/**
 	 * Identifies a user with optional traits.
-	 * 
+	 *
 	 * Associates subsequent events with the specified user ID and optionally
 	 * sets user properties. This method should be called when a user logs in
 	 * or when you want to associate events with a known user.
-	 * 
+	 *
+	 * **User Context (New):** User data (userId, email, traits) is automatically stored
+	 * and included in all subsequent `track()` calls. This makes it easy for providers
+	 * like Loops, Customer.io, or Intercom to access user information without passing
+	 * it manually each time. The data is cleared when `reset()` is called (e.g., on logout).
+	 *
 	 * The method automatically ensures initialization but doesn't block execution
 	 * if initialization is still in progress.
-	 * 
+	 *
 	 * @param userId Unique identifier for the user (e.g., database ID, email)
-	 * @param traits Optional user properties and characteristics
-	 * 
+	 * @param traits Optional user properties and characteristics (email, name, plan, etc.)
+	 *
 	 * @example
 	 * ```typescript
 	 * // Basic user identification
 	 * analytics.identify('user-123');
 	 * ```
-	 * 
+	 *
 	 * @example
 	 * ```typescript
-	 * // Identify with user traits
+	 * // Identify with user traits (recommended - enables email-based providers)
 	 * analytics.identify('user-123', {
 	 *   email: 'john@example.com',
 	 *   name: 'John Doe',
@@ -168,24 +175,39 @@ export class BrowserAnalytics<
 	 *     notifications: false
 	 *   }
 	 * });
+	 *
+	 * // Now all subsequent track() calls automatically include user context
+	 * analytics.track('button_clicked', { buttonId: 'checkout' });
+	 * // Providers receive: context.user = { userId: 'user-123', email: 'john@example.com', traits: {...} }
 	 * ```
-	 * 
+	 *
 	 * @example
 	 * ```typescript
 	 * // In a login handler
 	 * async function handleLogin(email: string, password: string) {
 	 *   const user = await login(email, password);
-	 *   
+	 *
+	 *   // Identify user with full traits
 	 *   analytics.identify(user.id, {
 	 *     email: user.email,
 	 *     name: user.name,
+	 *     plan: user.plan,
+	 *     company: user.company,
 	 *     lastLogin: new Date().toISOString()
 	 *   });
+	 *
+	 *   // All subsequent events now include this user context automatically
+	 * }
+	 *
+	 * // In a logout handler - clear user context
+	 * async function handleLogout() {
+	 *   analytics.reset(); // Clears userId and traits
 	 * }
 	 * ```
 	 */
-	identify(userId: string, traits?: Record<string, unknown>): void {
+	identify(userId: string, traits?: TUserTraits): void {
 		this.userId = userId;
+		this.userTraits = traits;
 
 		// Run initialization if needed, but don't block
 		this.ensureInitialized().catch((error) => {
@@ -199,15 +221,19 @@ export class BrowserAnalytics<
 
 	/**
 	 * Tracks a custom event with properties.
-	 * 
+	 *
 	 * This is the main method for tracking user interactions and business events.
 	 * The method ensures initialization before tracking and sends the event to all
 	 * configured providers. Events are enriched with context information like
 	 * timestamp, user ID, session ID, and browser context.
-	 * 
+	 *
+	 * **User Context (New):** If `identify()` was called previously, user data (userId,
+	 * email, traits) is automatically included in the event context sent to all providers.
+	 * This happens transparently - you don't need to pass user data manually.
+	 *
 	 * If providers are configured, the method waits for all providers to complete
 	 * tracking. Failed providers don't prevent others from succeeding.
-	 * 
+	 *
 	 * @param eventName Name of the event to track (must match your event definitions)
 	 * @param properties Event-specific properties and data
 	 * @returns Promise that resolves when tracking is complete for all providers
@@ -220,7 +246,20 @@ export class BrowserAnalytics<
 	 *   page: '/landing'
 	 * });
 	 * ```
-	 * 
+	 *
+	 * @example
+	 * ```typescript
+	 * // User context is automatically included after identify()
+	 * analytics.identify('user-123', {
+	 *   email: 'user@example.com',
+	 *   plan: 'pro'
+	 * });
+	 *
+	 * // Now all events automatically include user context
+	 * analytics.track('button_clicked', { buttonId: 'checkout' });
+	 * // Providers receive: context.user = { userId: 'user-123', email: 'user@example.com', traits: {...} }
+	 * ```
+	 *
 	 * @example
 	 * ```typescript
 	 * // Track a purchase event
@@ -235,14 +274,14 @@ export class BrowserAnalytics<
 	 *   paymentMethod: 'credit_card'
 	 * });
 	 * ```
-	 * 
+	 *
 	 * @example
 	 * ```typescript
 	 * // Fire-and-forget for non-critical events (client-side typical usage)
 	 * analytics.track('feature_viewed', { feature: 'dashboard' });
 	 * // Don't await - let it track in the background
 	 * ```
-	 * 
+	 *
 	 * @example
 	 * ```typescript
 	 * // Error handling
@@ -271,10 +310,22 @@ export class BrowserAnalytics<
 			sessionId: this.sessionId,
 		};
 
+		// Build context with user data
+		const contextWithUser: EventContext<TUserTraits> = {
+			...this.context,
+			user: this.userId || this.userTraits ? {
+				userId: this.userId,
+				email: this.userTraits && 'email' in this.userTraits
+					? (this.userTraits.email as string | undefined)
+					: undefined,
+				traits: this.userTraits,
+			} : undefined,
+		};
+
 		// Track with all providers in parallel
 		const trackPromises = this.providers.map(async (provider) => {
 			try {
-				await provider.track(event, this.context);
+				await provider.track(event, contextWithUser);
 			} catch (error) {
 				// Log error but don't throw - one provider failing shouldn't break others
 				console.error(
@@ -490,6 +541,7 @@ export class BrowserAnalytics<
 	 */
 	reset(): void {
 		this.userId = undefined;
+		this.userTraits = undefined;
 		this.sessionId = this.generateSessionId();
 		for (const provider of this.providers) {
 			provider.reset();
@@ -556,7 +608,7 @@ export class BrowserAnalytics<
 	 * });
 	 * ```
 	 */
-	updateContext(context: Partial<EventContext>): void {
+	updateContext(context: Partial<EventContext<TUserTraits>>): void {
 		this.context = {
 			...this.context,
 			...context,

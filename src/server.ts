@@ -42,18 +42,22 @@ export interface ServerAnalyticsConfig {
  * }, { userId: 'user-123' });
  * ```
  */
-export function createServerAnalytics<TEvents = never>(
+export function createServerAnalytics<
+	TEvents = never,
+	TUserTraits extends Record<string, unknown> = Record<string, unknown>,
+>(
 	config: ServerAnalyticsConfig,
-): ServerAnalytics<EventMapFromCollection<TEvents>> {
+): ServerAnalytics<EventMapFromCollection<TEvents>, TUserTraits> {
 	const analyticsConfig: AnalyticsConfig = {
 		providers: config.providers || [],
 		debug: config.debug,
 		enabled: config.enabled,
 	};
 
-	const analytics = new ServerAnalytics<EventMapFromCollection<TEvents>>(
-		analyticsConfig,
-	);
+	const analytics = new ServerAnalytics<
+		EventMapFromCollection<TEvents>,
+		TUserTraits
+	>(analyticsConfig);
 	analytics.initialize();
 
 	return analytics;

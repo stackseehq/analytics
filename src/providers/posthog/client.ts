@@ -75,6 +75,9 @@ export class PostHogClientProvider extends BaseAnalyticsProvider {
 			...(context?.page && { $current_url: context.page.path }),
 			...(context?.device && { device: context.device }),
 			...(context?.utm && { utm: context.utm }),
+			// Include user email and traits as regular event properties
+			...(context?.user?.email && { user_email: context.user.email }),
+			...(context?.user?.traits && { user_traits: context.user.traits }),
 		};
 
 		this.posthog.capture(event.action, properties);

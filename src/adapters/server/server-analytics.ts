@@ -5,6 +5,7 @@ import type {
 	BaseEvent,
 	EventCategory,
 	EventContext,
+	UserContext,
 } from "@/core/events/types.js";
 
 // Default event map type - allows any event with any properties when no specific map is provided
@@ -12,6 +13,7 @@ type DefaultEventMap = Record<string, Record<string, unknown>>;
 
 export class ServerAnalytics<
 	TEventMap extends Record<string, Record<string, unknown>> = DefaultEventMap,
+	TUserTraits extends Record<string, unknown> = Record<string, unknown>,
 > {
 	private providers: AnalyticsProvider[] = [];
 	private config: AnalyticsConfig;
@@ -153,22 +155,27 @@ export class ServerAnalytics<
 
 	/**
 	 * Tracks a custom event with properties and optional context.
-	 * 
+	 *
 	 * This is the main method for tracking business events on the server side.
 	 * The method sends the event to all configured providers and waits for completion.
 	 * Failed providers don't prevent others from succeeding.
-	 * 
+	 *
 	 * Server-side tracking typically includes additional context like IP addresses,
 	 * user agents, and server-specific metadata that isn't available on the client.
-	 * 
+	 *
+	 * **User Context (New):** You can now pass user data (email, traits) with each event
+	 * via `options.user` or `options.context.user`. This is useful for providers like
+	 * Loops, Customer.io, or Intercom that require user identifiers.
+	 *
 	 * @param eventName Name of the event to track (must match your event definitions)
 	 * @param properties Event-specific properties and data
-	 * @param options Optional configuration including user ID, session ID, and context
+	 * @param options Optional configuration including user ID, session ID, user context, and additional context
 	 * @param options.userId User ID to associate with this event
 	 * @param options.sessionId Session ID to associate with this event
-	 * @param options.context Additional context for this event
+	 * @param options.user User context including email and traits (automatically included in event context)
+	 * @param options.context Additional context for this event (page, device, etc.)
 	 * @returns Promise that resolves when tracking is complete for all providers
-	 * 
+	 *
 	 * @example
 	 * ```typescript
 	 * // Basic event tracking
@@ -179,10 +186,10 @@ export class ServerAnalytics<
 	 *   statusCode: 200
 	 * });
 	 * ```
-	 * 
+	 *
 	 * @example
 	 * ```typescript
-	 * // Track with user context
+	 * // Track with user context (recommended for email-based providers)
 	 * await analytics.track('purchase_completed', {
 	 *   orderId: 'order-123',
 	 *   amount: 99.99,
@@ -190,40 +197,68 @@ export class ServerAnalytics<
 	 *   itemCount: 3
 	 * }, {
 	 *   userId: 'user-456',
-	 *   sessionId: 'session-789',
+	 *   user: {
+	 *     email: 'user@example.com',
+	 *     traits: {
+	 *       plan: 'pro',
+	 *       company: 'Acme Corp'
+	 *     }
+	 *   },
 	 *   context: {
 	 *     page: { path: '/checkout/complete' },
-	 *     device: { userAgent: req.headers['user-agent'] },
-	 *     ip: req.ip
+	 *     device: { userAgent: req.headers['user-agent'] }
+	 *   }
+	 * });
+	 * // Providers receive: context.user = { email: 'user@example.com', traits: {...} }
+	 * ```
+	 *
+	 * @example
+	 * ```typescript
+	 * // Alternative: Pass user via context.user
+	 * await analytics.track('feature_used', {
+	 *   featureName: 'export'
+	 * }, {
+	 *   userId: 'user-123',
+	 *   context: {
+	 *     user: {
+	 *       email: 'user@example.com'
+	 *     },
+	 *     page: { path: '/dashboard' }
 	 *   }
 	 * });
 	 * ```
-	 * 
+	 *
 	 * @example
 	 * ```typescript
-	 * // In an Express.js route handler
+	 * // In an Express.js route handler with user data
 	 * app.post('/api/users', async (req, res) => {
 	 *   const user = await createUser(req.body);
-	 *   
-	 *   // Track user creation with server context
+	 *
+	 *   // Track user creation with full user context
 	 *   await analytics.track('user_created', {
 	 *     userId: user.id,
 	 *     email: user.email,
 	 *     plan: user.plan
 	 *   }, {
 	 *     userId: user.id,
+	 *     user: {
+	 *       email: user.email,
+	 *       traits: {
+	 *         name: user.name,
+	 *         plan: user.plan,
+	 *         company: user.company
+	 *       }
+	 *     },
 	 *     context: {
 	 *       page: { path: req.path },
-	 *       device: { userAgent: req.headers['user-agent'] },
-	 *       ip: req.ip,
-	 *       server: { version: process.env.APP_VERSION }
+	 *       device: { userAgent: req.headers['user-agent'] }
 	 *     }
 	 *   });
-	 *   
+	 *
 	 *   res.json(user);
 	 * });
 	 * ```
-	 * 
+	 *
 	 * @example
 	 * ```typescript
 	 * // Error handling in tracking
@@ -241,13 +276,14 @@ export class ServerAnalytics<
 	 */
 	async track<TEventName extends string>(
 		eventName: TEventName,
-		properties: TEventName extends keyof TEventMap 
-			? TEventMap[TEventName] 
+		properties: TEventName extends keyof TEventMap
+			? TEventMap[TEventName]
 			: Record<string, unknown>,
 		options?: {
 			userId?: string;
 			sessionId?: string;
-			context?: EventContext;
+			context?: EventContext<TUserTraits>;
+			user?: UserContext<TUserTraits>;
 		},
 	): Promise<void> {
 		if (!this.initialized) {
@@ -264,9 +300,10 @@ export class ServerAnalytics<
 			sessionId: options?.sessionId,
 		};
 
-		const context: EventContext = {
+		const context: EventContext<TUserTraits> = {
 			...this.config.defaultContext,
 			...options?.context,
+			user: options?.user || options?.context?.user,
 		};
 
 		// Track with all providers in parallel
@@ -349,15 +386,15 @@ export class ServerAnalytics<
 	pageView(
 		properties?: Record<string, unknown>,
 		options?: {
-			context?: EventContext;
+			context?: EventContext<TUserTraits>;
 		},
 	): void {
 		if (!this.initialized) return;
 
-		const context: EventContext = {
+		const context: EventContext<TUserTraits> = {
 			...this.config.defaultContext,
 			...options?.context,
-		};
+		} as EventContext<TUserTraits>;
 
 		for (const provider of this.providers) {
 			provider.pageView(properties, context);
@@ -426,15 +463,15 @@ export class ServerAnalytics<
 	pageLeave(
 		properties?: Record<string, unknown>,
 		options?: {
-			context?: EventContext;
+			context?: EventContext<TUserTraits>;
 		},
 	): void {
 		if (!this.initialized) return;
 
-		const context: EventContext = {
+		const context: EventContext<TUserTraits> = {
 			...this.config.defaultContext,
 			...options?.context,
-		};
+		} as EventContext<TUserTraits>;
 
 		for (const provider of this.providers) {
 			if (provider.pageLeave) {
