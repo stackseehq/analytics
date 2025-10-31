@@ -186,7 +186,7 @@ export class BentoClientProvider extends BaseAnalyticsProvider {
 				}),
 			};
 
-			this.bento.track("$pageview", data);
+			this.bento.track("$view", data);
 		}
 
 		this.log("Tracked page view", { properties, context });

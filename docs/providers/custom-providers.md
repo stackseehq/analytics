@@ -388,10 +388,10 @@ pageView(properties?: Record<string, unknown>, context?: EventContext): void {
 
   const email = context?.user?.email || this.currentUserEmail || "anonymous@unknown.com";
 
-  // Bento doesn't have pageView - use track with "$pageview" type
+  // Bento doesn't have pageView - use track with "$view" type
   this.client.V1.track({
     email,
-    type: "$pageview",  // Special event type
+    type: "$view",  // Bento's official page view event
     details: {
       ...properties,
       ...(context?.page && {

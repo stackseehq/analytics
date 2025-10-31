@@ -760,7 +760,7 @@ The provider converts unsupported methods to a supported format:
 pageView(properties?: Record<string, unknown>, context?: EventContext): void {
   this.client.V1.track({
     email,
-    type: "$pageview", // Convert to custom event
+    type: "$view", // Bento's official page view event
     details: { ...properties, ...context?.page }
   });
 }

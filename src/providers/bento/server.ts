@@ -193,7 +193,7 @@ export class BentoServerProvider extends BaseAnalyticsProvider {
 		this.client.V1
 			.track({
 				email,
-				type: "$pageview",
+				type: "$view",
 				details,
 				fields,
 			})
