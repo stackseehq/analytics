@@ -82,14 +82,17 @@ export async function ingestProxyEvents<
 							device: {
 								...event.context?.device,
 								// Add IP (using type assertion for extended fields)
+								// biome-ignore lint/suspicious/noExplicitAny: IP field not in base device type
 								...(ip ? ({ ip } as any) : {}),
 							},
 						};
 
 						// Convert BaseEvent back to track() parameters
-					await analytics.track(event.event.action, event.event.properties as any, {
+						// biome-ignore lint/suspicious/noExplicitAny: Generic event forwarding requires type assertion
+						await analytics.track(event.event.action, event.event.properties as any, {
 							userId: event.event.userId,
 							sessionId: event.event.sessionId,
+							// biome-ignore lint/suspicious/noExplicitAny: Generic context forwarding requires type assertion
 							context: enrichedContext as any,
 						});
 						break;
@@ -107,10 +110,12 @@ export async function ingestProxyEvents<
 							...serverContext,
 							device: {
 								...event.context?.device,
+							// biome-ignore lint/suspicious/noExplicitAny: IP field not in base device type
 								// Add IP (using type assertion for extended fields)
 								...(ip ? ({ ip } as any) : {}),
 							},
 						};
+					// biome-ignore lint/suspicious/noExplicitAny: Generic context forwarding requires type assertion
 
 						analytics.pageView(event.properties, enrichedContext as any);
 						break;

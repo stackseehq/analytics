@@ -244,6 +244,7 @@ export class ProxyProvider extends BaseAnalyticsProvider {
 				referrer: document.referrer,
 				...context?.page,
 				// Additional fields for proxy (cast to any to bypass strict typing)
+				// biome-ignore lint/suspicious/noExplicitAny: Extended page context fields not in base type
 				...(({ url: window.location.href } as any)),
 			},
 			user: {
@@ -252,6 +253,7 @@ export class ProxyProvider extends BaseAnalyticsProvider {
 			device: {
 				...context?.device,
 				// Additional fields for proxy (cast to any to bypass strict typing)
+				// biome-ignore lint/suspicious/noExplicitAny: Extended device context fields not in base type
 				...(({
 					userAgent: navigator.userAgent,
 					language: navigator.language,

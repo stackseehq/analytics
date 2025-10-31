@@ -1,3 +1,4 @@
+// biome-ignore lint/suspicious/noExplicitAny: Test file needs type assertions for extended context fields
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
 	ingestProxyEvents,
