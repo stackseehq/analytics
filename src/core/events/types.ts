@@ -37,6 +37,10 @@ export interface EventContext<
 		path: string;
 		title?: string;
 		referrer?: string;
+		url?: string;
+		host?: string;
+		protocol?: string;
+		search?: string;
 	};
 	device?: {
 		type?: string;

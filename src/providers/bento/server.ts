@@ -110,6 +110,13 @@ export class BentoServerProvider extends BaseAnalyticsProvider {
 
 		// Extract email from userId or traits
 		const email = (traits?.email as string | undefined) || userId;
+
+		// Validate that we have a proper email format
+		if (!email || !email.includes("@")) {
+			this.log("Skipping identify - invalid or missing email", { userId, traits });
+			return;
+		}
+
 		this.currentUserEmail = email;
 
 		// Add subscriber with traits using the V1 API
@@ -136,8 +143,20 @@ export class BentoServerProvider extends BaseAnalyticsProvider {
 			context?.user?.email ||
 			this.currentUserEmail ||
 			(context?.user?.userId as string | undefined) ||
-			event.userId ||
-			"anonymous@unknown.com";
+			event.userId;
+
+		// Bento SDK does not currently support anonymous events
+		// See: https://github.com/bentonow/bento-node-sdk
+		if (!email || !email.includes("@")) {
+			console.warn(
+				"[Bento-Server] Skipping event - Bento requires an email address. " +
+				"Anonymous events are not currently supported by the Bento Node SDK. " +
+				"For now, use the Bento client provider for anonymous tracking. " +
+				"If you're using a proxy, use the hybrid pattern as described in the docs. " +
+				"For identified users, call identify() with a valid email before tracking events."
+			);
+			return;
+		}
 
 		const details = {
 			...event.properties,
@@ -146,13 +165,19 @@ export class BentoServerProvider extends BaseAnalyticsProvider {
 			...(event.sessionId && { sessionId: event.sessionId }),
 			...(context?.page && {
 				page: {
+					url: context.page.url,
+					host: context.page.host,
 					path: context.page.path,
 					title: context.page.title,
+					protocol: context.page.protocol,
 					referrer: context.page.referrer,
+					...(context.page.search && { search: context.page.search }),
 				},
 			}),
 			...(context?.device && { device: context.device }),
 			...(context?.utm && { utm: context.utm }),
+			site: this.config.siteUuid,
+			...(context?.user?.userId && { visitor: context.user.userId }),
 		};
 
 		// Add user traits as fields if available
@@ -176,16 +201,37 @@ export class BentoServerProvider extends BaseAnalyticsProvider {
 		if (!this.isEnabled() || !this.initialized || !this.client) return;
 
 		// Get email from context or current user
-		const email =
-			context?.user?.email || this.currentUserEmail || "anonymous@unknown.com";
+		const email = context?.user?.email || this.currentUserEmail;
+
+		// Bento SDK does not currently support anonymous events
+		// See: https://github.com/bentonow/bento-node-sdk
+		if (!email || !email.includes("@")) {
+			console.warn(
+				"[Bento-Server] Skipping pageView - Bento requires an email address. " +
+				"Anonymous events are not currently supported by the Bento Node SDK. " +
+				"For now, use the Bento client provider for anonymous tracking. " +
+				"If you're using a proxy, use the hybrid pattern as described in the docs. " +
+				"For identified users, call identify() with a valid email before tracking events."
+			);
+			return;
+		}
 
 		const details = {
 			...properties,
+			date: new Date().toISOString(),
 			...(context?.page && {
-				path: context.page.path,
-				title: context.page.title,
-				referrer: context.page.referrer,
+				page: {
+					url: context.page.url,
+					host: context.page.host,
+					path: context.page.path,
+					title: context.page.title,
+					protocol: context.page.protocol,
+					referrer: context.page.referrer,
+					...(context.page.search && { search: context.page.search }),
+				},
 			}),
+			site: this.config.siteUuid,
+			...(context?.user?.userId && { visitor: context.user.userId }),
 		};
 
 		const fields = context?.user?.traits || {};

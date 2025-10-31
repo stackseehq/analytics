@@ -166,9 +166,13 @@ export class BentoClientProvider extends BaseAnalyticsProvider {
 			...(event.sessionId && { sessionId: event.sessionId }),
 			...(context?.page && {
 				page: {
+					url: context.page.url,
+					host: context.page.host,
 					path: context.page.path,
 					title: context.page.title,
+					protocol: context.page.protocol,
 					referrer: context.page.referrer,
+					...(context.page.search && { search: context.page.search }),
 				},
 			}),
 			...(context?.device && { device: context.device }),
@@ -176,6 +180,7 @@ export class BentoClientProvider extends BaseAnalyticsProvider {
 			// Include user email and traits as regular event properties
 			...(context?.user?.email && { user_email: context.user.email }),
 			...(context?.user?.traits && { user_traits: context.user.traits }),
+			...(context?.user?.userId && { visitor: context.user.userId }),
 		};
 
 		this.bento.track(event.action, data);
@@ -193,11 +198,19 @@ export class BentoClientProvider extends BaseAnalyticsProvider {
 		if (properties || context?.page) {
 			const data = {
 				...properties,
+				date: new Date().toISOString(),
 				...(context?.page && {
-					path: context.page.path,
-					title: context.page.title,
-					referrer: context.page.referrer,
+					page: {
+						url: context.page.url,
+						host: context.page.host,
+						path: context.page.path,
+						title: context.page.title,
+						protocol: context.page.protocol,
+						referrer: context.page.referrer,
+						...(context.page.search && { search: context.page.search }),
+					},
 				}),
+				...(context?.user?.userId && { visitor: context.user.userId }),
 			};
 
 			this.bento.track("$view", data);
@@ -215,11 +228,19 @@ export class BentoClientProvider extends BaseAnalyticsProvider {
 
 		const data = {
 			...properties,
+			date: new Date().toISOString(),
 			...(context?.page && {
-				path: context.page.path,
-				title: context.page.title,
-				referrer: context.page.referrer,
+				page: {
+					url: context.page.url,
+					host: context.page.host,
+					path: context.page.path,
+					title: context.page.title,
+					protocol: context.page.protocol,
+					referrer: context.page.referrer,
+					...(context.page.search && { search: context.page.search }),
+				},
 			}),
+			...(context?.user?.userId && { visitor: context.user.userId }),
 		};
 
 		this.bento.track("$pageleave", data);
