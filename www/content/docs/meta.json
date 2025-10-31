@@ -1,12 +1,16 @@
 {
   "title": "Documentation",
   "pages": [
+    "---Getting Started---",
     "index",
-    "quick-start",
+    "installation",
+    "your-first-event",
+    "identifying-users",
+    "---Core Concepts---",
     "core-concepts",
     "---Providers---",
     "providers",
-    "---Guides---",
+    "---Framework Guides---",
     "guides",
     "---API Reference---",
     "api"

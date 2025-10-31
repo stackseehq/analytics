@@ -1,0 +1,649 @@
+---
+title: Next.js App Router
+description: Complete integration guide for Next.js 13+ with App Router
+---
+
+import { Step, Steps } from 'fumadocs-ui/components/steps';
+
+This guide shows you how to integrate @stacksee/analytics into a Next.js application using the App Router (Next.js 13+).
+
+## Installation
+
+<Steps>
+<Step>
+
+### Install Dependencies
+
+```bash
+npm install @stacksee/analytics
+```
+
+Install your provider SDKs (we'll use PostHog as an example):
+
+```bash
+npm install posthog-js posthog-node
+```
+
+</Step>
+
+<Step>
+
+### Set Up Environment Variables
+
+```bash title=".env.local"
+# Client-side (public)
+NEXT_PUBLIC_POSTHOG_KEY=your-posthog-api-key
+NEXT_PUBLIC_POSTHOG_HOST=https://app.posthog.com
+
+# Server-side (private)
+POSTHOG_API_KEY=your-posthog-api-key
+```
+
+</Step>
+</Steps>
+
+## Client-Side Setup
+
+### 1. Define Your Events
+
+Create a shared event definitions file:
+
+```typescript title="lib/events.ts"
+import type { CreateEventDefinition, EventCollection } from '@stacksee/analytics';
+
+export const appEvents = {
+  pageViewed: {
+    name: 'page_viewed',
+    category: 'navigation',
+    properties: {} as {
+      path: string;
+      title: string;
+    }
+  },
+
+  buttonClicked: {
+    name: 'button_clicked',
+    category: 'engagement',
+    properties: {} as {
+      buttonId: string;
+      location: string;
+    }
+  },
+
+  userSignedUp: {
+    name: 'user_signed_up',
+    category: 'user',
+    properties: {} as {
+      email: string;
+      plan: 'free' | 'pro' | 'enterprise';
+    }
+  }
+} as const satisfies EventCollection<Record<string, CreateEventDefinition<string>>>;
+
+export type AppEvents = typeof appEvents;
+```
+
+### 2. Create Analytics Instance
+
+```typescript title="lib/analytics.ts"
+import { createClientAnalytics } from '@stacksee/analytics/client';
+import { PostHogClientProvider } from '@stacksee/analytics/providers/client';
+import type { AppEvents } from './events';
+
+export const analytics = createClientAnalytics<AppEvents>({
+  providers: [
+    new PostHogClientProvider({
+      token: process.env.NEXT_PUBLIC_POSTHOG_KEY!,
+      api_host: process.env.NEXT_PUBLIC_POSTHOG_HOST
+    })
+  ],
+  debug: process.env.NODE_ENV === 'development'
+});
+```
+
+### 3. Initialize in Root Layout
+
+Create a client component to initialize analytics:
+
+```typescript title="components/analytics-provider.tsx"
+'use client';
+
+import { useEffect } from 'react';
+import { usePathname, useSearchParams } from 'next/navigation';
+import { analytics } from '@/lib/analytics';
+
+export function AnalyticsProvider({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  // Initialize analytics on mount
+  useEffect(() => {
+    analytics.initialize();
+  }, []);
+
+  // Track page views on route change
+  useEffect(() => {
+    if (pathname) {
+      analytics.pageView({
+        path: pathname,
+        title: document.title
+      });
+    }
+  }, [pathname, searchParams]);
+
+  return <>{children}</>;
+}
+```
+
+Add the provider to your root layout:
+
+```typescript title="app/layout.tsx"
+import { AnalyticsProvider } from '@/components/analytics-provider';
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <html lang="en">
+      <body>
+        <AnalyticsProvider>
+          {children}
+        </AnalyticsProvider>
+      </body>
+    </html>
+  );
+}
+```
+
+### 4. Track Events in Client Components
+
+```typescript title="app/components/signup-button.tsx"
+'use client';
+
+import { analytics } from '@/lib/analytics';
+
+export function SignupButton() {
+  const handleClick = () => {
+    analytics.track('buttonClicked', {
+      buttonId: 'signup-cta',
+      location: 'hero'
+    });
+  };
+
+  return (
+    <button onClick={handleClick}>
+      Sign Up
+    </button>
+  );
+}
+```
+
+## Server-Side Setup
+
+### 1. Create Server Analytics Instance
+
+```typescript title="lib/server-analytics.ts"
+import { createServerAnalytics } from '@stacksee/analytics/server';
+import { PostHogServerProvider } from '@stacksee/analytics/providers/server';
+import type { AppEvents } from './events';
+
+export const serverAnalytics = createServerAnalytics<AppEvents>({
+  providers: [
+    new PostHogServerProvider({
+      apiKey: process.env.POSTHOG_API_KEY!,
+      host: process.env.NEXT_PUBLIC_POSTHOG_HOST
+    })
+  ],
+  debug: process.env.NODE_ENV === 'development'
+});
+```
+
+### 2. Track in Server Actions
+
+```typescript title="app/actions.ts"
+'use server';
+
+import { serverAnalytics } from '@/lib/server-analytics';
+import { revalidatePath } from 'next/cache';
+
+export async function createUser(formData: FormData) {
+  const email = formData.get('email') as string;
+  const plan = formData.get('plan') as 'free' | 'pro' | 'enterprise';
+
+  // Create user in database...
+  const user = await db.user.create({
+    data: { email, plan }
+  });
+
+  // Track signup
+  await serverAnalytics.track('userSignedUp', {
+    email,
+    plan
+  }, {
+    userId: user.id,
+    user: {
+      email: user.email,
+      traits: { plan }
+    }
+  });
+
+  // IMPORTANT: Always shutdown in serverless
+  await serverAnalytics.shutdown();
+
+  revalidatePath('/dashboard');
+}
+```
+
+### 3. Track in API Routes
+
+```typescript title="app/api/users/route.ts"
+import { NextResponse } from 'next/server';
+import { serverAnalytics } from '@/lib/server-analytics';
+
+export async function POST(request: Request) {
+  const body = await request.json();
+
+  // Process request...
+  const user = await db.user.create({
+    data: body
+  });
+
+  // Track event
+  await serverAnalytics.track('userSignedUp', {
+    email: body.email,
+    plan: body.plan
+  }, {
+    userId: user.id,
+    user: {
+      email: user.email,
+      traits: {
+        plan: user.plan
+      }
+    }
+  });
+
+  // Shutdown to flush events
+  await serverAnalytics.shutdown();
+
+  return NextResponse.json({ user });
+}
+```
+
+### 4. Track in Route Handlers
+
+```typescript title="app/api/analytics/route.ts"
+import { NextRequest, NextResponse } from 'next/server';
+import { serverAnalytics } from '@/lib/server-analytics';
+
+export async function POST(request: NextRequest) {
+  const body = await request.json();
+
+  // Track custom event
+  await serverAnalytics.track(body.event, body.properties, {
+    userId: body.userId,
+    user: body.user
+  });
+
+  await serverAnalytics.shutdown();
+
+  return NextResponse.json({ success: true });
+}
+```
+
+## User Identification
+
+### Client-Side Identification
+
+Identify users in a client component after login:
+
+```typescript title="components/auth-provider.tsx"
+'use client';
+
+import { useEffect } from 'react';
+import { analytics } from '@/lib/analytics';
+import { useUser } from '@/hooks/use-user';
+
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const user = useUser();
+
+  // Identify user when logged in
+  useEffect(() => {
+    if (user) {
+      analytics.identify(user.id, {
+        email: user.email,
+        name: user.name,
+        plan: user.plan
+      });
+    } else {
+      // Reset when logged out
+      analytics.reset();
+    }
+  }, [user]);
+
+  return <>{children}</>;
+}
+```
+
+### Server-Side Identification
+
+Pass user context with each server-side event:
+
+```typescript title="lib/get-user-context.ts"
+import { auth } from '@/lib/auth';
+
+export async function getUserContext() {
+  const session = await auth();
+
+  if (!session?.user) {
+    return undefined;
+  }
+
+  return {
+    userId: session.user.id,
+    user: {
+      email: session.user.email,
+      traits: {
+        name: session.user.name,
+        plan: session.user.plan
+      }
+    }
+  };
+}
+```
+
+Use it in server actions:
+
+```typescript title="app/actions.ts"
+'use server';
+
+import { serverAnalytics } from '@/lib/server-analytics';
+import { getUserContext } from '@/lib/get-user-context';
+
+export async function updateProfile(formData: FormData) {
+  const userContext = await getUserContext();
+
+  await serverAnalytics.track('profileUpdated', {
+    fields: Array.from(formData.keys())
+  }, userContext);
+
+  await serverAnalytics.shutdown();
+}
+```
+
+## Middleware Integration
+
+Track requests in middleware:
+
+```typescript title="middleware.ts"
+import { NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
+import { serverAnalytics } from '@/lib/server-analytics';
+
+export async function middleware(request: NextRequest) {
+  // Track API requests
+  if (request.nextUrl.pathname.startsWith('/api/')) {
+    const user = await getUserFromRequest(request);
+
+    await serverAnalytics.track('apiRequest', {
+      path: request.nextUrl.pathname,
+      method: request.method
+    }, user ? {
+      userId: user.id,
+      user: {
+        email: user.email,
+        traits: { plan: user.plan }
+      }
+    } : undefined);
+
+    await serverAnalytics.shutdown();
+  }
+
+  return NextResponse.next();
+}
+
+export const config = {
+  matcher: '/api/:path*'
+};
+```
+
+## Form Handling
+
+### With Server Actions
+
+```typescript title="app/signup/page.tsx"
+import Form from 'next/form';
+import { signup } from './actions';
+
+export default function SignupPage() {
+  return (
+    <Form action={signup}>
+      <input type="email" name="email" required />
+      <input type="password" name="password" required />
+      <button type="submit">Sign Up</button>
+    </Form>
+  );
+}
+```
+
+```typescript title="app/signup/actions.ts"
+'use server';
+
+import { serverAnalytics } from '@/lib/server-analytics';
+import { redirect } from 'next/navigation';
+
+export async function signup(formData: FormData) {
+  const email = formData.get('email') as string;
+
+  // Create user...
+  const user = await db.user.create({ data: { email } });
+
+  // Track signup
+  await serverAnalytics.track('userSignedUp', {
+    email,
+    plan: 'free'
+  }, {
+    userId: user.id,
+    user: { email, traits: { plan: 'free' } }
+  });
+
+  await serverAnalytics.shutdown();
+
+  redirect('/dashboard');
+}
+```
+
+### With use:enhance Alternative
+
+```typescript title="components/signup-form.tsx"
+'use client';
+
+import { useState, useTransition } from 'react';
+import { analytics } from '@/lib/analytics';
+import { signup } from '@/app/signup/actions';
+
+export function SignupForm() {
+  const [isPending, startTransition] = useTransition();
+
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+
+    // Track client-side
+    analytics.track('formSubmitted', {
+      formId: 'signup',
+      formType: 'signup'
+    });
+
+    // Submit via server action
+    const formData = new FormData(e.currentTarget);
+    startTransition(() => {
+      signup(formData);
+    });
+  };
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <input type="email" name="email" required />
+      <input type="password" name="password" required />
+      <button type="submit" disabled={isPending}>
+        {isPending ? 'Signing up...' : 'Sign Up'}
+      </button>
+    </form>
+  );
+}
+```
+
+## Serverless Best Practices
+
+### Vercel Edge Functions
+
+```typescript title="app/api/edge/route.ts"
+import { NextRequest, NextResponse } from 'next/server';
+import { serverAnalytics } from '@/lib/server-analytics';
+
+export const runtime = 'edge';
+
+export async function GET(request: NextRequest) {
+  await serverAnalytics.track('edgeFunction', {
+    path: request.nextUrl.pathname
+  });
+
+  // Always shutdown in edge functions
+  await serverAnalytics.shutdown();
+
+  return NextResponse.json({ success: true });
+}
+```
+
+### Using `waitUntil`
+
+For non-critical events, use Vercel's `waitUntil`:
+
+```typescript title="app/api/data/route.ts"
+import { NextRequest, NextResponse } from 'next/server';
+import { waitUntil } from '@vercel/functions';
+import { serverAnalytics } from '@/lib/server-analytics';
+
+export async function GET(request: NextRequest) {
+  const data = await fetchData();
+
+  // Track in background without blocking response
+  waitUntil(
+    serverAnalytics.track('dataFetched', {
+      count: data.length
+    }).then(() => serverAnalytics.shutdown())
+  );
+
+  return NextResponse.json(data);
+}
+```
+
+## Common Patterns
+
+### Protected Routes
+
+```typescript title="middleware.ts"
+import { NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
+import { serverAnalytics } from '@/lib/server-analytics';
+
+export async function middleware(request: NextRequest) {
+  const token = request.cookies.get('session')?.value;
+
+  if (!token && request.nextUrl.pathname.startsWith('/dashboard')) {
+    // Track unauthorized access
+    await serverAnalytics.track('unauthorizedAccess', {
+      path: request.nextUrl.pathname
+    });
+
+    await serverAnalytics.shutdown();
+
+    return NextResponse.redirect(new URL('/login', request.url));
+  }
+
+  return NextResponse.next();
+}
+```
+
+### Error Tracking
+
+```typescript title="app/error.tsx"
+'use client';
+
+import { useEffect } from 'react';
+import { analytics } from '@/lib/analytics';
+
+export default function Error({
+  error,
+  reset,
+}: {
+  error: Error & { digest?: string };
+  reset: () => void;
+}) {
+  useEffect(() => {
+    analytics.track('errorOccurred', {
+      message: error.message,
+      digest: error.digest || 'unknown'
+    });
+  }, [error]);
+
+  return (
+    <div>
+      <h2>Something went wrong!</h2>
+      <button onClick={reset}>Try again</button>
+    </div>
+  );
+}
+```
+
+## Troubleshooting
+
+### Analytics Not Initializing
+
+Make sure `AnalyticsProvider` is a Client Component with `'use client'` directive:
+
+```typescript
+'use client';  // Must be at the top!
+
+import { analytics } from '@/lib/analytics';
+```
+
+### Events Not Tracking
+
+Check that you're using the correct environment variables:
+
+```bash
+# Client-side must be prefixed with NEXT_PUBLIC_
+NEXT_PUBLIC_POSTHOG_KEY=xxx
+
+# Server-side should NOT be prefixed
+POSTHOG_API_KEY=xxx
+```
+
+### Type Errors
+
+Ensure you're importing from the correct paths:
+
+```typescript
+// ✅ Correct
+import { createClientAnalytics } from '@stacksee/analytics/client';
+import { PostHogClientProvider } from '@stacksee/analytics/providers/client';
+
+// ❌ Wrong
+import { createClientAnalytics } from '@stacksee/analytics';
+```
+
+## Next Steps
+
+<Cards>
+  <Card title="Core Concepts" href="/docs/core-concepts/events">
+    Understand events, providers, and type safety
+  </Card>
+  <Card title="Identifying Users" href="/docs/identifying-users">
+    Learn how to identify and track users
+  </Card>
+  <Card title="PostHog Provider" href="/docs/providers/posthog">
+    Complete PostHog setup guide
+  </Card>
+</Cards>

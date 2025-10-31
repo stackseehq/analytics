@@ -1,0 +1,716 @@
+---
+title: SvelteKit
+description: Complete integration guide for SvelteKit applications
+---
+
+import { Step, Steps } from 'fumadocs-ui/components/steps';
+
+This guide shows you how to integrate @stacksee/analytics into a SvelteKit application.
+
+## Installation
+
+<Steps>
+<Step>
+
+### Install Dependencies
+
+```bash
+npm install @stacksee/analytics
+```
+
+Install your provider SDKs (we'll use PostHog as an example):
+
+```bash
+npm install posthog-js posthog-node
+```
+
+</Step>
+
+<Step>
+
+### Set Up Environment Variables
+
+```bash title=".env"
+# Client-side (public - must be prefixed with PUBLIC_)
+PUBLIC_POSTHOG_KEY=your-posthog-api-key
+PUBLIC_POSTHOG_HOST=https://app.posthog.com
+
+# Server-side (private - no prefix)
+POSTHOG_API_KEY=your-posthog-api-key
+```
+
+</Step>
+</Steps>
+
+## Client-Side Setup
+
+### 1. Define Your Events
+
+Create a shared event definitions file:
+
+```typescript title="src/lib/events.ts"
+import type { CreateEventDefinition, EventCollection } from '@stacksee/analytics';
+
+export const appEvents = {
+  pageViewed: {
+    name: 'page_viewed',
+    category: 'navigation',
+    properties: {} as {
+      path: string;
+      title: string;
+    }
+  },
+
+  buttonClicked: {
+    name: 'button_clicked',
+    category: 'engagement',
+    properties: {} as {
+      buttonId: string;
+      location: string;
+    }
+  },
+
+  userSignedUp: {
+    name: 'user_signed_up',
+    category: 'user',
+    properties: {} as {
+      email: string;
+      plan: 'free' | 'pro' | 'enterprise';
+    }
+  }
+} as const satisfies EventCollection<Record<string, CreateEventDefinition<string>>>;
+
+export type AppEvents = typeof appEvents;
+```
+
+### 2. Create Analytics Instance
+
+```typescript title="src/lib/analytics.ts"
+import { createClientAnalytics } from '@stacksee/analytics/client';
+import { PostHogClientProvider } from '@stacksee/analytics/providers/client';
+import { PUBLIC_POSTHOG_KEY, PUBLIC_POSTHOG_HOST } from '$env/static/public';
+import type { AppEvents } from './events';
+
+export const analytics = createClientAnalytics<AppEvents>({
+  providers: [
+    new PostHogClientProvider({
+      token: PUBLIC_POSTHOG_KEY,
+      api_host: PUBLIC_POSTHOG_HOST
+    })
+  ],
+  debug: import.meta.env.DEV
+});
+```
+
+### 3. Initialize in Root Layout
+
+```svelte title="src/routes/+layout.svelte"
+<script lang="ts">
+  import { onMount } from 'svelte';
+  import { page } from '$app/state';
+  import { analytics } from '$lib/analytics';
+
+  let { children } = $props();
+
+  // Initialize analytics on mount
+  onMount(async () => {
+    await analytics.initialize();
+  });
+
+  // Track page views on route change
+  $effect(() => {
+    if ($page.url.pathname) {
+      analytics.pageView({
+        path: $page.url.pathname,
+        title: document.title
+      });
+    }
+  });
+</script>
+
+{@render children()}
+```
+
+### 4. Track Events in Components
+
+```svelte title="src/routes/components/SignupButton.svelte"
+<script lang="ts">
+  import { analytics } from '$lib/analytics';
+
+  function handleClick() {
+    analytics.track('buttonClicked', {
+      buttonId: 'signup-cta',
+      location: 'hero'
+    });
+  }
+</script>
+
+<button on:click={handleClick}>
+  Sign Up
+</button>
+```
+
+## Server-Side Setup
+
+### 1. Create Server Analytics Instance
+
+```typescript title="src/lib/server-analytics.ts"
+import { createServerAnalytics } from '@stacksee/analytics/server';
+import { PostHogServerProvider } from '@stacksee/analytics/providers/server';
+import { POSTHOG_API_KEY, PUBLIC_POSTHOG_HOST } from '$env/static/private';
+import type { AppEvents } from './events';
+
+export const serverAnalytics = createServerAnalytics<AppEvents>({
+  providers: [
+    new PostHogServerProvider({
+      apiKey: POSTHOG_API_KEY,
+      host: PUBLIC_POSTHOG_HOST
+    })
+  ],
+  debug: import.meta.env.DEV
+});
+```
+
+> [!NOTE]
+> Note: `PUBLIC_POSTHOG_HOST` can be imported from either `$env/static/private` or `$env/static/public` since it's a public variable. We're importing it from `private` here for convenience alongside `POSTHOG_API_KEY`.
+
+### 2. Track in Load Functions
+
+```typescript title="src/routes/blog/[slug]/+page.server.ts"
+import { serverAnalytics } from '$lib/server-analytics';
+import type { PageServerLoad } from './$types';
+
+export const load: PageServerLoad = async ({ params }) => {
+  const post = await db.getPost(params.slug);
+
+  // Track page view
+  await serverAnalytics.track('pageViewed', {
+    path: `/blog/${params.slug}`,
+    title: post.title
+  });
+
+  // Always shutdown in serverless
+  await serverAnalytics.shutdown();
+
+  return { post };
+};
+```
+
+### 3. Track in Form Actions
+
+```typescript title="src/routes/signup/+page.server.ts"
+import { serverAnalytics } from '$lib/server-analytics';
+import { fail, redirect } from '@sveltejs/kit';
+import type { Actions } from './$types';
+
+export const actions: Actions = {
+  signup: async ({ request }) => {
+    const data = await request.formData();
+    const email = data.get('email') as string;
+    const plan = data.get('plan') as 'free' | 'pro' | 'enterprise';
+
+    // Validate
+    if (!email) {
+      return fail(400, { email, missing: true });
+    }
+
+    // Create user
+    const user = await db.user.create({
+      data: { email, plan }
+    });
+
+    // Track signup
+    await serverAnalytics.track('userSignedUp', {
+      email,
+      plan
+    }, {
+      userId: user.id,
+      user: {
+        email: user.email,
+        traits: { plan }
+      }
+    });
+
+    // Always shutdown
+    await serverAnalytics.shutdown();
+
+    throw redirect(303, '/dashboard');
+  }
+};
+```
+
+### 4. Track in API Endpoints
+
+```typescript title="src/routes/api/users/+server.ts"
+import { json } from '@sveltejs/kit';
+import { serverAnalytics } from '$lib/server-analytics';
+import type { RequestHandler } from './$types';
+
+export const POST: RequestHandler = async ({ request }) => {
+  const body = await request.json();
+
+  // Create user
+  const user = await db.user.create({
+    data: body
+  });
+
+  // Track event
+  await serverAnalytics.track('userSignedUp', {
+    email: body.email,
+    plan: body.plan
+  }, {
+    userId: user.id,
+    user: {
+      email: user.email,
+      traits: {
+        plan: user.plan
+      }
+    }
+  });
+
+  // Shutdown to flush events
+  await serverAnalytics.shutdown();
+
+  return json({ user });
+};
+```
+
+## User Identification
+
+### Client-Side Identification
+
+Identify users in your root layout after they log in:
+
+```svelte title="src/routes/+layout.svelte"
+<script lang="ts">
+  import { onMount } from 'svelte';
+  import { page } from '$app/state';
+  import { analytics } from '$lib/analytics';
+
+  let { data, children } = $props();
+
+  // Initialize analytics
+  onMount(async () => {
+    await analytics.initialize();
+  });
+
+  // Identify user when logged in
+  $effect(() => {
+    const user = data.user;
+
+    if (user) {
+      analytics.identify(user.id, {
+        email: user.email,
+        name: user.name,
+        plan: user.plan
+      });
+    } else {
+      analytics.reset();
+    }
+  });
+</script>
+
+{@render children()}
+```
+
+### Server-Side Identification
+
+Pass user context with each server-side event:
+
+```typescript title="src/lib/get-user-context.ts"
+import type { RequestEvent } from '@sveltejs/kit';
+
+export function getUserContext(event: RequestEvent) {
+  const user = event.locals.user;
+
+  if (!user) {
+    return undefined;
+  }
+
+  return {
+    userId: user.id,
+    user: {
+      email: user.email,
+      traits: {
+        name: user.name,
+        plan: user.plan
+      }
+    }
+  };
+}
+```
+
+Use it in load functions and actions:
+
+```typescript title="src/routes/profile/+page.server.ts"
+import { serverAnalytics } from '$lib/server-analytics';
+import { getUserContext } from '$lib/get-user-context';
+import type { PageServerLoad, Actions } from './$types';
+
+export const load: PageServerLoad = async (event) => {
+  const userContext = getUserContext(event);
+
+  await serverAnalytics.track('profileViewed', {}, userContext);
+  await serverAnalytics.shutdown();
+
+  return {
+    user: event.locals.user
+  };
+};
+
+export const actions: Actions = {
+  update: async (event) => {
+    const data = await event.request.formData();
+    const userContext = getUserContext(event);
+
+    await serverAnalytics.track('profileUpdated', {
+      fields: Array.from(data.keys())
+    }, userContext);
+
+    await serverAnalytics.shutdown();
+
+    return { success: true };
+  }
+};
+```
+
+## Hooks Integration
+
+Track requests in hooks:
+
+```typescript title="src/hooks.server.ts"
+import { serverAnalytics } from '$lib/server-analytics';
+import { getUserContext } from '$lib/get-user-context';
+import type { Handle } from '@sveltejs/kit';
+
+export const handle: Handle = async ({ event, resolve }) => {
+  // Populate user from session
+  const sessionId = event.cookies.get('sessionid');
+  if (sessionId) {
+    event.locals.user = await db.getUserFromSession(sessionId);
+  }
+
+  // Track API requests
+  if (event.url.pathname.startsWith('/api/')) {
+    const userContext = getUserContext(event);
+
+    await serverAnalytics.track('apiRequest', {
+      path: event.url.pathname,
+      method: event.request.method
+    }, userContext);
+
+    await serverAnalytics.shutdown();
+  }
+
+  return resolve(event);
+};
+```
+
+## Form Handling
+
+### With Enhanced Forms
+
+```svelte title="src/routes/signup/+page.svelte"
+<script lang="ts">
+  import { enhance } from '$app/forms';
+  import { analytics } from '$lib/analytics';
+
+  let { form } = $props();
+</script>
+
+<form
+  method="POST"
+  action="?/signup"
+  use:enhance={() => {
+    // Track form submission client-side
+    analytics.track('formSubmitted', {
+      formId: 'signup',
+      formType: 'signup'
+    });
+
+    return async ({ result, update }) => {
+      await update();
+    };
+  }}
+>
+  <label>
+    Email
+    <input
+      name="email"
+      type="email"
+      value={form?.email ?? ''}
+      required
+    />
+  </label>
+
+  {#if form?.missing}
+    <p class="error">Email is required</p>
+  {/if}
+
+  <button type="submit">Sign Up</button>
+</form>
+```
+
+The server action handles the server-side tracking:
+
+```typescript title="src/routes/signup/+page.server.ts"
+import { serverAnalytics } from '$lib/server-analytics';
+import { fail, redirect } from '@sveltejs/kit';
+import type { Actions } from './$types';
+
+export const actions: Actions = {
+  signup: async ({ request }) => {
+    const data = await request.formData();
+    const email = data.get('email') as string;
+
+    if (!email) {
+      return fail(400, { email, missing: true });
+    }
+
+    const user = await db.user.create({ data: { email } });
+
+    // Track server-side
+    await serverAnalytics.track('userSignedUp', {
+      email,
+      plan: 'free'
+    }, {
+      userId: user.id,
+      user: { email, traits: { plan: 'free' } }
+    });
+
+    await serverAnalytics.shutdown();
+
+    throw redirect(303, '/dashboard');
+  }
+};
+```
+
+## Common Patterns
+
+### Protected Routes
+
+```typescript title="src/hooks.server.ts"
+import { redirect } from '@sveltejs/kit';
+import { serverAnalytics } from '$lib/server-analytics';
+import type { Handle } from '@sveltejs/kit';
+
+export const handle: Handle = async ({ event, resolve }) => {
+  const sessionId = event.cookies.get('sessionid');
+
+  if (sessionId) {
+    event.locals.user = await db.getUserFromSession(sessionId);
+  }
+
+  // Protect dashboard routes
+  if (event.url.pathname.startsWith('/dashboard') && !event.locals.user) {
+    // Track unauthorized access
+    await serverAnalytics.track('unauthorizedAccess', {
+      path: event.url.pathname
+    });
+
+    await serverAnalytics.shutdown();
+
+    throw redirect(307, '/login');
+  }
+
+  return resolve(event);
+};
+```
+
+### Error Tracking
+
+```svelte title="src/routes/+error.svelte"
+<script lang="ts">
+  import { onMount } from 'svelte';
+  import { page } from '$app/stores';
+  import { analytics } from '$lib/analytics';
+
+  onMount(() => {
+    analytics.track('errorOccurred', {
+      message: $page.error?.message || 'Unknown error',
+      status: $page.status
+    });
+  });
+</script>
+
+<h1>Oops! Something went wrong</h1>
+<p>{$page.error?.message}</p>
+```
+
+### Layout Data with Analytics
+
+```typescript title="src/routes/+layout.server.ts"
+import { serverAnalytics } from '$lib/server-analytics';
+import type { LayoutServerLoad } from './$types';
+
+export const load: LayoutServerLoad = async ({ locals, url }) => {
+  // Track if user is logged in
+  if (locals.user) {
+    await serverAnalytics.track('pageView', {
+      path: url.pathname,
+      title: 'App'
+    }, {
+      userId: locals.user.id,
+      user: {
+        email: locals.user.email,
+        traits: {
+          plan: locals.user.plan
+        }
+      }
+    });
+
+    await serverAnalytics.shutdown();
+  }
+
+  return {
+    user: locals.user
+  };
+};
+```
+
+## Adapters & Deployment
+
+### Vercel Adapter
+
+```typescript title="src/routes/api/edge/+server.ts"
+import { json } from '@sveltejs/kit';
+import { serverAnalytics } from '$lib/server-analytics';
+import type { RequestHandler } from './$types';
+
+export const config = {
+  runtime: 'edge'
+};
+
+export const GET: RequestHandler = async () => {
+  await serverAnalytics.track('edgeFunction', {
+    runtime: 'edge'
+  });
+
+  // Always shutdown in edge functions
+  await serverAnalytics.shutdown();
+
+  return json({ success: true });
+};
+```
+
+### Node Adapter
+
+For Node.js deployments, shutdown is still important:
+
+```typescript title="src/routes/api/data/+server.ts"
+import { json } from '@sveltejs/kit';
+import { serverAnalytics } from '$lib/server-analytics';
+import type { RequestHandler } from './$types';
+
+export const GET: RequestHandler = async () => {
+  const data = await fetchData();
+
+  await serverAnalytics.track('dataFetched', {
+    count: data.length
+  });
+
+  // Shutdown to flush events
+  await serverAnalytics.shutdown();
+
+  return json(data);
+};
+```
+
+## Troubleshooting
+
+### Events Not Tracking
+
+Make sure environment variables are correctly prefixed:
+
+```bash
+# ✅ Correct - client-side variables must have PUBLIC_ prefix
+PUBLIC_POSTHOG_KEY=xxx
+
+# ✅ Correct - server-side variables have no prefix
+POSTHOG_API_KEY=xxx
+
+# ❌ Wrong - missing PUBLIC_ prefix for client
+POSTHOG_KEY=xxx
+```
+
+### Import Errors
+
+Use the correct import paths for SvelteKit:
+
+```typescript
+// ✅ Correct
+import { PUBLIC_POSTHOG_KEY } from '$env/static/public';
+import { POSTHOG_API_KEY } from '$env/static/private';
+
+// ❌ Wrong
+import { env } from '$env/dynamic/public';
+```
+
+### Type Errors
+
+Ensure you're importing from the correct paths:
+
+```typescript
+// ✅ Correct
+import { createClientAnalytics } from '@stacksee/analytics/client';
+import { createServerAnalytics } from '@stacksee/analytics/server';
+
+// ❌ Wrong
+import { createClientAnalytics, createServerAnalytics } from '@stacksee/analytics';
+```
+
+## Using with Svelte Runes
+
+If you're using Svelte 5 with runes, here's how to integrate analytics:
+
+```svelte title="src/routes/+layout.svelte"
+<script lang="ts">
+  import { onMount } from 'svelte';
+  import { page } from '$app/state';
+  import { analytics } from '$lib/analytics';
+
+  let { data, children } = $props();
+
+  // Initialize
+  onMount(() => {
+    analytics.initialize();
+  });
+
+  // Reactive tracking
+  $effect(() => {
+    if (page.url.pathname) {
+      analytics.pageView({
+        path: page.url.pathname,
+        title: document.title
+      });
+    }
+  });
+
+  // User identification
+  $effect(() => {
+    const user = data.user;
+    if (user) {
+      analytics.identify(user.id, {
+        email: user.email,
+        name: user.name
+      });
+    }
+  });
+</script>
+
+{@render children()}
+```
+
+## Next Steps
+
+<Cards>
+  <Card title="Core Concepts" href="/docs/core-concepts/events">
+    Understand events, providers, and type safety
+  </Card>
+  <Card title="Identifying Users" href="/docs/identifying-users">
+    Learn how to identify and track users
+  </Card>
+  <Card title="PostHog Provider" href="/docs/providers/posthog">
+    Complete PostHog setup guide
+  </Card>
+</Cards>

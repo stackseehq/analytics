@@ -1,0 +1,506 @@
+---
+title: Client vs Server
+description: Understanding when and how to track analytics on client and server
+---
+
+@stacksee/analytics provides separate APIs for client-side and server-side tracking. Understanding when to use each is crucial for effective analytics implementation.
+
+## Quick Comparison
+
+| Feature | Client | Server |
+|---------|--------|--------|
+| **State** | Stateful - persists after `identify()` | Stateless - pass per request |
+| **Usage** | Call `identify()` once | Pass `user` with each `track()` |
+| **Reset** | Call `reset()` on logout | No reset needed |
+| **Use Case** | Single user per session | Multiple users per instance |
+| **Async** | Fire-and-forget | Await for critical events |
+| **Shutdown** | Not required | Required in serverless |
+
+## Client-Side Tracking
+
+### When to Use Client-Side
+
+Use client-side tracking for:
+- **Browser interactions** - Clicks, scrolls, form submissions
+- **Page views** - Navigation and route changes
+- **User behavior** - Time on page, feature engagement
+- **Client-side state** - UI changes, modal opens, etc.
+
+### Setup
+
+```typescript
+import { createClientAnalytics } from '@stacksee/analytics/client';
+import { PostHogClientProvider } from '@stacksee/analytics/providers/client';
+import type { AppEvents } from './events';
+
+export const analytics = createClientAnalytics<AppEvents>({
+  providers: [
+    new PostHogClientProvider({
+      token: import.meta.env.VITE_POSTHOG_KEY
+    })
+  ]
+});
+```
+
+### Stateful User Context
+
+The client maintains user state across page interactions:
+
+```typescript
+// 1. User logs in - identify once
+analytics.identify('user-123', {
+  email: 'user@example.com',
+  name: 'John Doe',
+  plan: 'pro'
+});
+
+// 2. Track events - user context is automatic
+analytics.track('button_clicked', {
+  buttonId: 'checkout'
+});
+// Providers receive: { userId: 'user-123', email: 'user@example.com', ... }
+
+analytics.track('feature_used', {
+  feature: 'export'
+});
+// Same user context automatically included
+
+// 3. User logs out - reset state
+analytics.reset();
+```
+
+### Fire-and-Forget Tracking
+
+Client-side tracking is non-blocking by default:
+
+```typescript
+function handleClick() {
+  // Don't await - events send in background
+  analytics.track('button_clicked', {
+    buttonId: 'cta'
+  });
+
+  // User continues immediately
+  navigateTo('/checkout');
+}
+```
+
+This keeps your UI responsive. Events are sent asynchronously without blocking user interactions.
+
+### Page Views
+
+Track page views automatically or manually:
+
+```typescript
+// Manual page view
+analytics.pageView({
+  path: window.location.pathname,
+  title: document.title,
+  referrer: document.referrer
+});
+
+// Most frameworks can auto-track page views
+// See framework guides for details
+```
+
+## Server-Side Tracking
+
+### When to Use Server-Side
+
+Use server-side tracking for:
+- **API endpoints** - Request/response events
+- **Background jobs** - Cron jobs, queue workers
+- **Server actions** - Next.js server actions, SvelteKit form actions
+- **Sensitive data** - Events with server-only context (IP, auth data)
+- **Critical events** - Must guarantee delivery (payments, signups)
+
+### Setup
+
+```typescript
+import { createServerAnalytics } from '@stacksee/analytics/server';
+import { PostHogServerProvider } from '@stacksee/analytics/providers/server';
+import type { AppEvents } from './events';
+
+export const serverAnalytics = createServerAnalytics<AppEvents>({
+  providers: [
+    new PostHogServerProvider({
+      apiKey: process.env.POSTHOG_API_KEY!
+    })
+  ]
+});
+```
+
+### Stateless User Context
+
+The server doesn't maintain state—pass user context with each event:
+
+```typescript
+// Track event with user context
+await serverAnalytics.track('api_request', {
+  endpoint: '/users',
+  method: 'POST'
+}, {
+  // Pass user info for this event only
+  userId: 'user-123',
+  user: {
+    email: 'user@example.com',
+    traits: {
+      plan: 'pro',
+      company: 'Acme Corp'
+    }
+  }
+});
+
+// Next request - must pass context again
+await serverAnalytics.track('api_request', {
+  endpoint: '/products',
+  method: 'GET'
+}, {
+  userId: 'user-456',  // Different user
+  user: {
+    email: 'other@example.com'
+  }
+});
+```
+
+### Await for Critical Events
+
+Server-side tracking should be awaited for critical events:
+
+```typescript
+export async function POST(req: Request) {
+  const body = await req.json();
+
+  try {
+    // Process payment
+    const payment = await processPayment(body);
+
+    // Await analytics to ensure it completes
+    await serverAnalytics.track('payment_processed', {
+      amount: payment.amount,
+      transactionId: payment.id
+    }, {
+      userId: body.userId
+    });
+
+    return Response.json({ success: true });
+  } catch (error) {
+    // Track failure
+    await serverAnalytics.track('payment_failed', {
+      error: error.message
+    }, {
+      userId: body.userId
+    });
+
+    return Response.json({ error: 'Payment failed' }, { status: 500 });
+  } finally {
+    // IMPORTANT: Always shutdown
+    await serverAnalytics.shutdown();
+  }
+}
+```
+
+### Serverless Environments
+
+In serverless environments (Vercel, Netlify, AWS Lambda), always call `shutdown()`:
+
+```typescript
+import { serverAnalytics } from '@/lib/server-analytics';
+
+export async function handler(req, res) {
+  // Track event
+  await serverAnalytics.track('api_request', {
+    endpoint: req.url
+  });
+
+  // Shutdown to flush events before function terminates
+  await serverAnalytics.shutdown();
+
+  return res.json({ success: true });
+}
+```
+
+**Why is shutdown important?**
+- Serverless functions terminate immediately after returning a response
+- Without `shutdown()`, pending events may not be sent
+- `shutdown()` flushes all queued events and closes connections
+
+### Non-Blocking with `waitUntil`
+
+For non-critical events, use `waitUntil` to avoid blocking the response:
+
+```typescript
+import { waitUntil } from '@vercel/functions';
+import { serverAnalytics } from '@/lib/server-analytics';
+
+export async function GET(req: Request) {
+  const result = await fetchData();
+
+  // Track in background without blocking response
+  waitUntil(
+    serverAnalytics.track('api_request', {
+      endpoint: req.url
+    }).then(() => serverAnalytics.shutdown())
+  );
+
+  return Response.json(result);
+}
+```
+
+## Choosing Between Client and Server
+
+### Use Client-Side When:
+
+✅ Tracking user interactions (clicks, scrolls)
+✅ Page views and navigation
+✅ UI state changes
+✅ Performance metrics (time on page)
+✅ Non-critical events
+✅ You want automatic user context
+
+### Use Server-Side When:
+
+✅ API requests and responses
+✅ Background jobs
+✅ Critical business events (payments, signups)
+✅ Events with sensitive data
+✅ Server-only context (IP, auth headers)
+✅ You need guaranteed delivery
+
+### Use Both When:
+
+Sometimes you'll track the same event from both sides:
+
+**Example: User Signup**
+
+```typescript
+// Client-side: Track button click
+analytics.track('signup_button_clicked', {
+  location: 'hero'
+});
+
+// Server-side: Track actual signup
+await serverAnalytics.track('user_signed_up', {
+  email: body.email,
+  plan: body.plan
+}, {
+  userId: newUser.id,
+  user: {
+    email: newUser.email
+  }
+});
+```
+
+This gives you both:
+- **Client data**: Where they clicked, how long they took
+- **Server data**: Actual signup details, accurate user info
+
+## Import Paths
+
+Always use environment-specific imports:
+
+<Tabs items={['Client', 'Server']}>
+<Tab value="Client">
+
+```typescript
+// ✅ Correct - only browser-compatible code
+import { createClientAnalytics } from '@stacksee/analytics/client';
+import { PostHogClientProvider } from '@stacksee/analytics/providers/client';
+
+// ❌ Wrong - may bundle Node.js dependencies
+import { createClientAnalytics } from '@stacksee/analytics';
+import { PostHogClientProvider } from '@stacksee/analytics/providers';
+```
+
+</Tab>
+<Tab value="Server">
+
+```typescript
+// ✅ Correct - only Node.js code
+import { createServerAnalytics } from '@stacksee/analytics/server';
+import { PostHogServerProvider } from '@stacksee/analytics/providers/server';
+
+// ❌ Wrong - may bundle browser code
+import { createServerAnalytics } from '@stacksee/analytics';
+import { PostHogServerProvider } from '@stacksee/analytics/providers';
+```
+
+</Tab>
+</Tabs>
+
+## Common Patterns
+
+### Next.js App Router
+
+```typescript title="app/actions.ts"
+'use server';
+
+import { serverAnalytics } from '@/lib/server-analytics';
+
+export async function createUser(formData: FormData) {
+  const email = formData.get('email') as string;
+
+  // Track server action
+  await serverAnalytics.track('user_created', {
+    email,
+    source: 'signup_form'
+  }, {
+    userId: 'anonymous'  // Before user is created
+  });
+
+  await serverAnalytics.shutdown();
+}
+```
+
+```typescript title="app/components/SignupForm.tsx"
+'use client';
+
+import { analytics } from '@/lib/analytics';
+import { createUser } from '@/app/actions';
+
+export function SignupForm() {
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+
+    // Track client-side event
+    analytics.track('signup_form_submitted', {
+      source: 'hero'
+    });
+
+    // Call server action (tracks server-side)
+    await createUser(new FormData(e.target));
+  };
+
+  return <form onSubmit={handleSubmit}>...</form>;
+}
+```
+
+### SvelteKit
+
+```typescript title="src/routes/api/signup/+server.ts"
+import { serverAnalytics } from '$lib/server-analytics';
+import type { RequestHandler } from './$types';
+
+export const POST: RequestHandler = async ({ request }) => {
+  const body = await request.json();
+
+  // Track server-side
+  await serverAnalytics.track('user_signed_up', {
+    email: body.email
+  }, {
+    userId: body.userId
+  });
+
+  await serverAnalytics.shutdown();
+
+  return new Response('OK');
+};
+```
+
+```typescript title="src/routes/signup/+page.svelte"
+<script lang="ts">
+  import { analytics } from '$lib/analytics';
+
+  async function handleSignup() {
+    // Track client-side
+    analytics.track('signup_button_clicked', {
+      location: 'hero'
+    });
+
+    // Call API (tracks server-side)
+    await fetch('/api/signup', { method: 'POST', ... });
+  }
+</script>
+```
+
+### API Routes
+
+```typescript title="pages/api/users.ts"
+import { serverAnalytics } from '@/lib/server-analytics';
+import type { NextApiRequest, NextApiResponse } from 'next';
+
+export default async function handler(
+  req: NextApiRequest,
+  res: NextApiResponse
+) {
+  if (req.method === 'POST') {
+    await serverAnalytics.track('user_created', {
+      email: req.body.email
+    }, {
+      userId: req.body.userId
+    });
+
+    await serverAnalytics.shutdown();
+
+    return res.status(200).json({ success: true });
+  }
+}
+```
+
+## Best Practices
+
+### 1. One Client Instance, Multiple Server Instances
+
+```typescript
+// ✅ Client - one instance for the session
+// lib/analytics.ts
+export const analytics = createClientAnalytics({ /* ... */ });
+
+// ✅ Server - new instance per request/function
+// Each API route creates its own instance
+export function createAnalytics() {
+  return createServerAnalytics({ /* ... */ });
+}
+```
+
+### 2. Always Shutdown Server Analytics
+
+```typescript
+// ✅ Good
+await serverAnalytics.track('event', {});
+await serverAnalytics.shutdown();
+
+// ❌ Bad - events may be lost
+await serverAnalytics.track('event', {});
+// Function terminates before events are sent!
+```
+
+### 3. Don't Await Client Tracking
+
+```typescript
+// ✅ Good - fire and forget
+analytics.track('button_clicked', { id: 'cta' });
+navigate('/checkout');
+
+// ❌ Bad - blocks UI
+await analytics.track('button_clicked', { id: 'cta' });
+navigate('/checkout');  // User waits for analytics!
+```
+
+### 4. Pass User Context Server-Side
+
+```typescript
+// ✅ Good - explicit context
+await serverAnalytics.track('event', {}, {
+  userId: 'user-123',
+  user: { email: 'user@example.com' }
+});
+
+// ❌ Bad - no user context
+await serverAnalytics.track('event', {});
+// Who triggered this event?
+```
+
+## Next Steps
+
+<Cards>
+  <Card title="Type Safety" href="/docs/core-concepts/type-safety">
+    Learn about TypeScript features and type safety
+  </Card>
+  <Card title="Framework Guides" href="/docs/guides/nextjs">
+    Integration guides for Next.js, SvelteKit, and more
+  </Card>
+  <Card title="Advanced Patterns" href="/docs/guides/advanced">
+    Serverless, batching, and advanced usage
+  </Card>
+</Cards>

@@ -1,0 +1,108 @@
+---
+title: Framework Guides
+description: Integration guides for popular frameworks
+---
+
+Step-by-step integration guides for popular web frameworks. Each guide includes complete examples for both client-side and server-side tracking.
+
+## Available Guides
+
+<Cards>
+  <Card title="Next.js App Router" href="/docs/guides/nextjs">
+    Complete integration guide for Next.js 13+ with App Router, Server Components, and Server Actions.
+  </Card>
+  <Card title="SvelteKit" href="/docs/guides/sveltekit">
+    Full SvelteKit integration with load functions, form actions, and hooks.
+  </Card>
+</Cards>
+
+## What's Covered
+
+Each framework guide includes:
+
+- ✅ **Installation** - Dependencies and environment setup
+- ✅ **Client-side tracking** - Page views, user interactions, and events
+- ✅ **Server-side tracking** - API routes, server actions, and background jobs
+- ✅ **User identification** - Session management and user context
+- ✅ **Form handling** - Progressive enhancement and data submission
+- ✅ **Common patterns** - Auth, errors, protected routes, and more
+- ✅ **Serverless best practices** - Edge functions and deployment
+
+## Quick Start by Framework
+
+### Next.js App Router
+
+```typescript
+// lib/analytics.ts
+import { createClientAnalytics } from '@stacksee/analytics/client';
+import { PostHogClientProvider } from '@stacksee/analytics/providers/client';
+
+export const analytics = createClientAnalytics({
+  providers: [
+    new PostHogClientProvider({
+      token: process.env.NEXT_PUBLIC_POSTHOG_KEY!
+    })
+  ]
+});
+```
+
+[Full Next.js guide →](/docs/guides/nextjs)
+
+### SvelteKit
+
+```typescript
+// src/lib/analytics.ts
+import { createClientAnalytics } from '@stacksee/analytics/client';
+import { PostHogClientProvider } from '@stacksee/analytics/providers/client';
+import { PUBLIC_POSTHOG_KEY } from '$env/static/public';
+
+export const analytics = createClientAnalytics({
+  providers: [
+    new PostHogClientProvider({
+      token: PUBLIC_POSTHOG_KEY
+    })
+  ]
+});
+```
+
+[Full SvelteKit guide →](/docs/guides/sveltekit)
+
+## Framework-Agnostic Setup
+
+If your framework isn't listed, you can still use @stacksee/analytics! The core concepts remain the same:
+
+1. Create a client analytics instance for browser code
+2. Create a server analytics instance for server code
+3. Track events using the appropriate instance
+
+Check out the [Core Concepts](/docs/core-concepts/events) for framework-agnostic guidance.
+
+## Coming Soon
+
+We're working on guides for:
+
+- Vite + React
+- Remix
+- Astro
+- Nuxt
+
+Want to see a specific framework? [Open an issue](https://github.com/stacksee/stacksee-analytics/issues) and let us know!
+
+## Need Help?
+
+- Check the [Core Concepts](/docs/core-concepts/events) for deeper understanding
+- Browse [Provider guides](/docs/providers) for service-specific setup
+- See [Your First Event](/docs/your-first-event) for a quick tutorial
+
+## Next Steps
+
+Choose your framework and get started:
+
+<Cards>
+  <Card title="Next.js" href="/docs/guides/nextjs">
+    App Router, Server Components, Server Actions
+  </Card>
+  <Card title="SvelteKit" href="/docs/guides/sveltekit">
+    Load functions, form actions, hooks
+  </Card>
+</Cards>

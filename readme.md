@@ -2,38 +2,14 @@
 
 A highly typed, zero-dependency, provider-agnostic analytics library for TypeScript applications. Works seamlessly on both client and server sides with full type safety for your custom events.
 
-## Table of Contents
+> **📚 [Full Documentation](https://stacksee-analytics.vercel.app)** - For complete guides, examples, and API reference, visit our documentation site.
 
-- [Features](#features)
-- [Providers](#providers)
-- [Installation](#installation)
-- [Quick Start](#quick-start)
-  - [1. Define Your Events](#1-define-your-events)
-  - [2. Client-Side Usage](#2-client-side-usage)
-  - [3. Server-Side Usage](#3-server-side-usage)
-- [Async Tracking](#async-tracking-when-to-await-vs-fire-and-forget)
-  - [Fire-and-forget (Client-side typical usage)](#fire-and-forget-client-side-typical-usage)
-  - [Await for critical events (Server-side typical usage)](#await-for-critical-events-server-side-typical-usage)
-  - [Error handling](#error-handling)
-  - [Best practices](#best-practices)
-- [A complete example](#a-complete-example)
-- [Advanced Usage](#advanced-usage)
-  - [Creating a Typed Analytics Service](#creating-a-typed-analytics-service)
-  - [Event Categories](#event-categories)
-  - [Adding Custom Providers](#adding-custom-providers)
-  - [Client-Only and Server-Only Providers](#client-only-and-server-only-providers)
-  - [Using Multiple Providers](#using-multiple-providers)
-- [Server Deployments and waitUntil](#server-deployments-and-waituntil)
-  - [Vercel Functions](#vercel-functions)
-  - [Cloudflare Workers](#cloudflare-workers)
-  - [Netlify Functions](#netlify-functions)
-- [API Reference](#api-reference)
-  - [Client API](#client-api)
-  - [Server API](#server-api)
-  - [Type Helpers](#type-helpers)
-- [Best Practices](#best-practices)
-- [Contributing](#contributing)
-- [License](#license)
+## Quick Links
+
+- 📖 [Documentation](https://stacksee-analytics.vercel.app)
+- 🚀 [Quick Start](https://stacksee-analytics.vercel.app/docs/quick-start)
+- 🔌 [Providers](https://stacksee-analytics.vercel.app/docs/providers)
+- 💡 [Core Concepts](https://stacksee-analytics.vercel.app/docs/core-concepts)
 
 ## Features
 
@@ -53,15 +29,15 @@ The library includes built-in support for popular analytics services, with more 
 
 | Provider | Type | Documentation |
 |----------|------|---------------|
-| **PostHog** | Product Analytics | [docs/providers/posthog.md](./docs/providers/posthog.md) |
-| **Bento** | Email Marketing & Events | [docs/providers/bento.md](./docs/providers/bento.md) |
-| **Pirsch** | Privacy-Focused Web Analytics | [docs/providers/pirsch.md](./docs/providers/pirsch.md) |
+| **PostHog** | Product Analytics | [View Docs](https://stacksee-analytics.vercel.app/docs/providers/posthog) |
+| **Bento** | Email Marketing & Events | [View Docs](https://stacksee-analytics.vercel.app/docs/providers/bento) |
+| **Pirsch** | Privacy-Focused Web Analytics | [View Docs](https://stacksee-analytics.vercel.app/docs/providers/pirsch) |
 
 ### Community & Custom Providers
 
 Want to use a different analytics service? Check out our guide:
 
-**[Creating Custom Providers →](./docs/providers/custom-providers.md)**
+**[Creating Custom Providers →](https://stacksee-analytics.vercel.app/docs/providers/custom)**
 
 You can easily create providers for:
 - Google Analytics
@@ -72,7 +48,7 @@ You can easily create providers for:
 - Loops
 - Any analytics service with a JavaScript SDK
 
-**[View all provider documentation →](./docs/providers/)**
+**[View all provider documentation →](https://stacksee-analytics.vercel.app/docs/providers)**
 
 ## Installation
 
@@ -89,7 +65,7 @@ pnpm install @bentonow/bento-node-sdk
 pnpm install pirsch-sdk
 ```
 
-> **See also:** [Provider Documentation](./docs/providers/) for detailed setup guides for each provider.
+> **See also:** [Provider Documentation](https://stacksee-analytics.vercel.app/docs/providers) for detailed setup guides for each provider.
 
 ## Quick Start
 
@@ -745,7 +721,7 @@ export const appEvents = {
 
 Want to integrate with a different analytics service? See our comprehensive guide:
 
-**[Creating Custom Providers →](./docs/providers/custom-providers.md)**
+**[Creating Custom Providers →](https://stacksee-analytics.vercel.app/docs/providers/custom)**
 
 Quick example:
 
@@ -1063,6 +1039,19 @@ const analytics = createServerAnalytics<AppEvents>({
 6. **Test your events** - Verify events are tracked correctly in development
 7. **Document events** - Add comments to explain when each event should be fired
 8. **Create provider instances once** - Reuse provider instances across your app
+
+---
+
+## Learn More
+
+This README provides a quick overview. For comprehensive documentation, guides, and examples:
+
+**📚 [Visit the Full Documentation](https://stacksee-analytics.vercel.app)**
+
+- [Quick Start Guide](https://stacksee-analytics.vercel.app/docs/quick-start)
+- [Core Concepts](https://stacksee-analytics.vercel.app/docs/core-concepts)
+- [Provider Setup Guides](https://stacksee-analytics.vercel.app/docs/providers)
+- [API Reference](https://stacksee-analytics.vercel.app/docs/api-reference)
 
 ## Contributing
 

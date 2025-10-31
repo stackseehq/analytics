@@ -1,0 +1,124 @@
+---
+title: Core Concepts Overview
+description: Deep dive into the fundamental concepts of @stacksee/analytics
+---
+
+This section covers the fundamental concepts you need to master @stacksee/analytics. Each guide goes deep into a specific topic with examples and best practices.
+
+## What You'll Learn
+
+<Cards>
+  <Card title="Events" href="/docs/core-concepts/events" icon="zap">
+    Define type-safe events with categories and properties. Learn event organization patterns and best practices.
+  </Card>
+  <Card title="Providers" href="/docs/core-concepts/providers" icon="plug">
+    Understand the plugin architecture, use multiple providers, and handle errors gracefully.
+  </Card>
+  <Card title="Client vs Server" href="/docs/core-concepts/client-vs-server" icon="server">
+    Learn when to track on client vs server, handle user context, and work with serverless environments.
+  </Card>
+  <Card title="Type Safety" href="/docs/core-concepts/type-safety" icon="shield">
+    Leverage TypeScript for compile-time validation, autocomplete, and bulletproof analytics tracking.
+  </Card>
+</Cards>
+
+## Learning Path
+
+If you're new to @stacksee/analytics, we recommend reading these guides in order:
+
+1. **Events** - Start here to understand how to define and track events
+2. **Providers** - Learn how events get delivered to analytics services
+3. **Client vs Server** - Understand when and how to track in different environments
+4. **Type Safety** - Master TypeScript features for error-free tracking
+
+## Prerequisites
+
+Before diving into these concepts, make sure you've:
+
+- ✅ Completed [Your First Event](/docs/your-first-event) tutorial
+- ✅ Installed @stacksee/analytics and at least one provider
+- ✅ Have a basic understanding of TypeScript
+
+## Quick Reference
+
+### Event Definition Pattern
+
+```typescript
+export const appEvents = {
+  eventName: {
+    name: 'event_name',
+    category: 'category',
+    properties: {} as {
+      // Type-safe properties
+    }
+  }
+} as const satisfies EventCollection<Record<string, CreateEventDefinition<string>>>;
+```
+
+### Client-Side Tracking
+
+```typescript
+import { analytics } from '@/lib/analytics';
+
+// Track event
+analytics.track('eventName', { /* properties */ });
+
+// Identify user
+analytics.identify('user-id', { /* traits */ });
+
+// Reset on logout
+analytics.reset();
+```
+
+### Server-Side Tracking
+
+```typescript
+import { serverAnalytics } from '@/lib/server-analytics';
+
+// Track with user context
+await serverAnalytics.track('eventName', { /* properties */ }, {
+  userId: 'user-id',
+  user: { /* user data */ }
+});
+
+// Always shutdown in serverless
+await serverAnalytics.shutdown();
+```
+
+## Common Questions
+
+### When should I use client-side vs server-side tracking?
+
+- **Client-side**: User interactions, page views, UI events
+- **Server-side**: API calls, background jobs, critical events
+
+See [Client vs Server](/docs/core-concepts/client-vs-server) for detailed guidance.
+
+### How do I use multiple analytics providers?
+
+Add them to the `providers` array when creating your analytics instance:
+
+```typescript
+const analytics = createClientAnalytics({
+  providers: [
+    new PostHogClientProvider({ token: 'xxx' }),
+    new BentoClientProvider({ siteUuid: 'xxx' })
+  ]
+});
+```
+
+Events are automatically sent to all providers. See [Providers](/docs/core-concepts/providers) for more.
+
+### How does type safety work?
+
+TypeScript infers event names and properties from your event definitions. This gives you autocomplete and compile-time errors for typos or wrong property types. See [Type Safety](/docs/core-concepts/type-safety) for the full picture.
+
+## Next Steps
+
+Ready to dive deep? Start with [Events →](/docs/core-concepts/events)
+
+Or jump to a specific topic:
+
+- [Providers →](/docs/core-concepts/providers)
+- [Client vs Server →](/docs/core-concepts/client-vs-server)
+- [Type Safety →](/docs/core-concepts/type-safety)
