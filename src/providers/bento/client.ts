@@ -4,13 +4,26 @@ import { isBrowser } from "@/utils/environment.js";
 
 // Bento client-side types - extend as needed from their SDK
 interface BentoClient {
+	// Core methods
 	view(): void;
 	identify(email: string): void;
 	track(event: string, data?: Record<string, unknown>): void;
 	tag(tag: string): void;
 	updateFields(fields: Record<string, unknown>): void;
+	// Utility methods
 	getEmail(): string | null;
 	getName(): string | null;
+	// Survey methods
+	showSurveyForm(
+		element: HTMLElement,
+		surveyId: string,
+		type?: "popup" | "inline",
+	): void;
+	spamCheck(email: string): Promise<boolean>;
+	// Chat methods (if enabled)
+	showChat?(): void;
+	hideChat?(): void;
+	openChat?(): void;
 }
 
 // Configuration for Bento client provider
@@ -219,5 +232,195 @@ export class BentoClientProvider extends BaseAnalyticsProvider {
 		// Bento doesn't have a built-in reset method, so we'll clear the identify
 		// by identifying with an empty/anonymous user
 		this.log("Reset user session - Note: Bento doesn't have a native reset method");
+	}
+
+	// ============================================================================
+	// Bento-Specific Utility Methods
+	// ============================================================================
+
+	/**
+	 * Add a tag to the current user
+	 *
+	 * @example
+	 * ```typescript
+	 * bentoProvider.tag('premium_user');
+	 * bentoProvider.tag('beta_tester');
+	 * ```
+	 */
+	tag(tag: string): void {
+		if (!this.isEnabled() || !this.initialized || !this.bento || !isBrowser())
+			return;
+
+		this.bento.tag(tag);
+		this.log("Added tag to user", { tag });
+	}
+
+	/**
+	 * Get the current user's email address
+	 *
+	 * @returns The user's email or null if not identified
+	 *
+	 * @example
+	 * ```typescript
+	 * const email = bentoProvider.getEmail();
+	 * if (email) {
+	 *   console.log('Current user:', email);
+	 * }
+	 * ```
+	 */
+	getEmail(): string | null {
+		if (!this.isEnabled() || !this.initialized || !this.bento || !isBrowser())
+			return null;
+
+		return this.bento.getEmail();
+	}
+
+	/**
+	 * Get the current user's name
+	 *
+	 * @returns The user's name or null if not set
+	 *
+	 * @example
+	 * ```typescript
+	 * const name = bentoProvider.getName();
+	 * if (name) {
+	 *   console.log('Welcome back,', name);
+	 * }
+	 * ```
+	 */
+	getName(): string | null {
+		if (!this.isEnabled() || !this.initialized || !this.bento || !isBrowser())
+			return null;
+
+		return this.bento.getName();
+	}
+
+	// ============================================================================
+	// Survey Methods
+	// ============================================================================
+
+	/**
+	 * Show a Bento survey form
+	 *
+	 * @param element - The HTML element to render the survey in
+	 * @param surveyId - The survey ID from your Bento account
+	 * @param type - Display type: 'popup' or 'inline' (default: 'popup')
+	 *
+	 * @example
+	 * ```typescript
+	 * const container = document.getElementById('survey-container');
+	 * if (container) {
+	 *   bentoProvider.showSurveyForm(container, 'survey-123', 'popup');
+	 * }
+	 * ```
+	 */
+	showSurveyForm(
+		element: HTMLElement,
+		surveyId: string,
+		type: "popup" | "inline" = "popup",
+	): void {
+		if (!this.isEnabled() || !this.initialized || !this.bento || !isBrowser())
+			return;
+
+		this.bento.showSurveyForm(element, surveyId, type);
+		this.log("Showed survey form", { surveyId, type });
+	}
+
+	/**
+	 * Validate an email address using Bento's spam check
+	 *
+	 * @param email - The email address to validate
+	 * @returns Promise that resolves to true if email is valid, false if spam
+	 *
+	 * @example
+	 * ```typescript
+	 * const isValid = await bentoProvider.spamCheck('user@example.com');
+	 * if (!isValid) {
+	 *   console.log('Invalid or spam email detected');
+	 * }
+	 * ```
+	 */
+	async spamCheck(email: string): Promise<boolean> {
+		if (!this.isEnabled() || !this.initialized || !this.bento || !isBrowser())
+			return false;
+
+		try {
+			const result = await this.bento.spamCheck(email);
+			this.log("Spam check completed", { email, result });
+			return result;
+		} catch (error) {
+			console.error("[Bento-Client] Spam check failed:", error);
+			return false;
+		}
+	}
+
+	// ============================================================================
+	// Chat Methods (if chat is enabled in Bento)
+	// ============================================================================
+
+	/**
+	 * Show the Bento chat widget
+	 *
+	 * @example
+	 * ```typescript
+	 * bentoProvider.showChat();
+	 * ```
+	 */
+	showChat(): void {
+		if (!this.isEnabled() || !this.initialized || !this.bento || !isBrowser())
+			return;
+
+		if (this.bento.showChat) {
+			this.bento.showChat();
+			this.log("Showed chat widget");
+		} else {
+			console.warn(
+				"[Bento-Client] Chat not available. Make sure chat is enabled in your Bento settings.",
+			);
+		}
+	}
+
+	/**
+	 * Hide the Bento chat widget
+	 *
+	 * @example
+	 * ```typescript
+	 * bentoProvider.hideChat();
+	 * ```
+	 */
+	hideChat(): void {
+		if (!this.isEnabled() || !this.initialized || !this.bento || !isBrowser())
+			return;
+
+		if (this.bento.hideChat) {
+			this.bento.hideChat();
+			this.log("Hid chat widget");
+		} else {
+			console.warn(
+				"[Bento-Client] Chat not available. Make sure chat is enabled in your Bento settings.",
+			);
+		}
+	}
+
+	/**
+	 * Open the Bento chat widget
+	 *
+	 * @example
+	 * ```typescript
+	 * bentoProvider.openChat();
+	 * ```
+	 */
+	openChat(): void {
+		if (!this.isEnabled() || !this.initialized || !this.bento || !isBrowser())
+			return;
+
+		if (this.bento.openChat) {
+			this.bento.openChat();
+			this.log("Opened chat widget");
+		} else {
+			console.warn(
+				"[Bento-Client] Chat not available. Make sure chat is enabled in your Bento settings.",
+			);
+		}
 	}
 }

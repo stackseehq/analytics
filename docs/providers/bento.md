@@ -2,6 +2,29 @@
 
 Bento is an email marketing and automation platform. This library provides both client-side (browser) and server-side (Node.js) providers for Bento.
 
+## Table of Contents
+
+- [Installation](#installation)
+- [Client-Side Usage](#client-side-usage)
+  - [Basic Setup](#basic-setup)
+  - [Configuration Options](#configuration-options)
+  - [Identifying Users](#identifying-users)
+  - [Tracking Events](#tracking-events)
+- [Server-Side Usage](#server-side-usage)
+  - [Basic Setup](#basic-setup-1)
+  - [Configuration Options](#configuration-options-1)
+  - [Getting Your API Keys](#getting-your-api-keys)
+- [User Context](#user-context)
+- [Event Types](#event-types)
+- [Tags and Custom Fields](#tags-and-custom-fields)
+- [Advanced Usage](#advanced-usage)
+  - [Bento-Specific Methods](#bento-specific-methods-client-side)
+  - [Utility Methods](#utility-methods)
+  - [Survey Methods](#survey-methods)
+  - [Chat Methods](#chat-methods-if-enabled)
+- [Limitations](#limitations)
+- [Resources](#resources)
+
 ## Installation
 
 ```bash
@@ -315,16 +338,193 @@ import type { BentoServerConfig, BentoAnalyticsOptions } from '@stacksee/analyti
 
 ## Advanced Usage
 
-### Accessing User Information (Client-Side)
+### Bento-Specific Methods (Client-Side)
 
-The Bento SDK provides utility methods that can be accessed if needed:
+The `BentoClientProvider` exposes additional Bento-specific methods beyond the standard analytics interface. To use these, you need direct access to the provider instance:
 
 ```typescript
-// Note: This requires direct access to the Bento SDK
-// The analytics library abstracts this, but you can access it if needed
-const email = window.bento?.getEmail();
-const name = window.bento?.getName();
+import { createClientAnalytics } from '@stacksee/analytics/client';
+import { BentoClientProvider } from '@stacksee/analytics/providers/client';
+
+// Create provider instance
+const bentoProvider = new BentoClientProvider({
+  siteUuid: 'your-site-uuid'
+});
+
+const analytics = createClientAnalytics({
+  providers: [bentoProvider]
+});
+
+await analytics.initialize();
+
+// Now use Bento-specific methods
 ```
+
+#### Utility Methods
+
+```typescript
+// Add tags to users
+bentoProvider.tag('premium_user');
+bentoProvider.tag('beta_tester');
+
+// Get current user information
+const email = bentoProvider.getEmail();
+console.log('Current user:', email);
+
+const name = bentoProvider.getName();
+console.log('User name:', name);
+```
+
+#### Survey Methods
+
+```typescript
+// Show a survey form
+const surveyContainer = document.getElementById('survey-container');
+if (surveyContainer) {
+  bentoProvider.showSurveyForm(
+    surveyContainer,
+    'survey-123',  // Survey ID from Bento
+    'popup'        // 'popup' or 'inline'
+  );
+}
+
+// Validate email addresses
+const isValidEmail = await bentoProvider.spamCheck('user@example.com');
+if (!isValidEmail) {
+  console.log('Invalid or spam email detected');
+}
+```
+
+#### Chat Methods (if enabled)
+
+If you have Bento Chat enabled in your account, you can control the chat widget:
+
+```typescript
+// Show the chat widget
+bentoProvider.showChat();
+
+// Hide the chat widget
+bentoProvider.hideChat();
+
+// Open the chat widget
+bentoProvider.openChat();
+```
+
+**Note:** Chat methods will log a warning if chat is not enabled in your Bento settings.
+
+### Complete Example with Bento-Specific Features
+
+```typescript
+import { createClientAnalytics } from '@stacksee/analytics/client';
+import { BentoClientProvider } from '@stacksee/analytics/providers/client';
+
+const bentoProvider = new BentoClientProvider({
+  siteUuid: 'your-site-uuid',
+  debug: true
+});
+
+const analytics = createClientAnalytics({
+  providers: [bentoProvider]
+});
+
+await analytics.initialize();
+
+// Standard analytics methods
+analytics.identify('user@example.com', {
+  email: 'user@example.com',
+  name: 'John Doe',
+  plan: 'pro'
+});
+
+await analytics.track('feature_used', {
+  feature: 'export'
+});
+
+// Bento-specific methods
+bentoProvider.tag('active_user');
+
+// Check if user exists
+const currentEmail = bentoProvider.getEmail();
+if (currentEmail) {
+  console.log('Tracking for:', currentEmail);
+}
+
+// Show survey for premium users
+const plan = 'pro'; // From your app state
+if (plan === 'pro') {
+  const container = document.getElementById('survey-container');
+  if (container) {
+    bentoProvider.showSurveyForm(container, 'premium-survey', 'popup');
+  }
+}
+
+// Enable chat for logged-in users
+if (currentEmail) {
+  bentoProvider.showChat();
+}
+```
+
+### Using with ProxyProvider for Server-Side Tracking
+
+You can use Bento utility methods while sending analytics through the ProxyProvider:
+
+```typescript
+import { createClientAnalytics } from '@stacksee/analytics/client';
+import { ProxyProvider, BentoClientProvider } from '@stacksee/analytics/providers/client';
+
+// Create separate Bento instance for utility methods
+const bentoUtility = new BentoClientProvider({
+  siteUuid: 'your-site-uuid'
+});
+await bentoUtility.initialize();
+
+// Use ProxyProvider for analytics (server-side tracking)
+const analytics = createClientAnalytics({
+  providers: [
+    new ProxyProvider({
+      endpoint: '/api/events'
+    })
+  ]
+});
+
+await analytics.initialize();
+
+// All analytics goes through your server
+analytics.identify('user@example.com', {
+  email: 'user@example.com',
+  name: 'John Doe'
+});
+
+analytics.track('page_viewed', { path: '/pricing' });
+
+// Use Bento utility methods for UI logic
+const email = bentoUtility.getEmail();
+const name = bentoUtility.getName();
+
+// Hide signup banner for identified users
+if (email) {
+  document.getElementById('signup-banner')?.style.display = 'none';
+  bentoUtility.tag('returning_user');
+}
+
+// Show chat for logged-in users
+if (email) {
+  bentoUtility.showChat();
+}
+
+// Conditional UI based on user state
+if (name) {
+  document.getElementById('user-greeting')!.textContent = `Welcome back, ${name}!`;
+}
+```
+
+**Why this pattern?**
+- **Analytics tracking** goes through your server (bypasses ad-blockers, adds server context)
+- **Utility methods** use client-side SDK (real-time access to user state)
+- Both share the same Bento state since they use the same Site UUID
+- You get the best of both worlds: reliable tracking + real-time UI updates
+
+See the [Proxy Provider documentation](./proxy.md#hybrid-setup-proxy--direct-provider-access) for more details on this pattern.
 
 ### Custom Event Prefix (Server-Side)
 
@@ -343,11 +543,14 @@ This is handled automatically by the provider.
 - Requires browser environment (no SSR)
 - Script loads from Bento's CDN
 - Automatically tracks initial page view
+- Chat methods require chat to be enabled in Bento settings
+- Survey methods require surveys to be created in Bento dashboard
 
 ### Server-Side
 - Requires `@bentonow/bento-node-sdk` package
 - Events may take 1-3 minutes to appear (batch API)
 - Requires email address for all events
+- Chat and survey features not available server-side
 
 ## Resources
 

@@ -349,7 +349,70 @@ const serverAnalytics = createServerAnalytics({
 await analytics.track('purchase', { amount: 99.99 });
 ```
 
-### Hybrid Setup
+### Hybrid Setup: Proxy + Direct Provider Access
+
+You can combine the ProxyProvider for analytics with a separate client-side provider instance to access provider-specific utility methods:
+
+```typescript
+import { createClientAnalytics } from '@stacksee/analytics/client';
+import { ProxyProvider } from '@stacksee/analytics/providers/client';
+import { BentoClientProvider } from '@stacksee/analytics/providers/client';
+
+// Create Bento instance for utility methods (not added to analytics)
+const bentoUtility = new BentoClientProvider({
+  siteUuid: 'your-site-uuid'
+});
+await bentoUtility.initialize();
+
+// Use ProxyProvider for all analytics tracking
+const analytics = createClientAnalytics({
+  providers: [
+    new ProxyProvider({
+      endpoint: '/api/events'
+    })
+  ]
+});
+
+await analytics.initialize();
+
+// Analytics goes through proxy (server-side)
+analytics.identify('user@example.com', {
+  email: 'user@example.com',
+  name: 'John Doe'
+});
+
+analytics.track('button_clicked', { buttonId: 'cta' });
+
+// Use Bento-specific utility methods directly
+const currentEmail = bentoUtility.getEmail();
+const currentName = bentoUtility.getName();
+
+// Hide/show UI based on user state
+if (currentEmail) {
+  document.getElementById('signup-banner')?.remove();
+  bentoUtility.tag('active_user');
+}
+
+// Show chat only for identified users
+if (currentEmail) {
+  bentoUtility.showChat();
+}
+```
+
+**Why this works:**
+- The ProxyProvider sends all analytics events to your server (bypassing ad-blockers)
+- The separate Bento instance loads the Bento SDK for utility methods (`getEmail()`, `tag()`, `showChat()`, etc.)
+- Both instances share the same underlying Bento state (same user identification)
+- You get server-side tracking reliability + client-side utility features
+
+**Use cases:**
+- Hide signup forms for identified users
+- Show/hide chat based on user status
+- Tag users based on client-side interactions
+- Display surveys conditionally
+- Get user info for UI personalization
+
+### Alternative: Direct Tracking Only for Non-Critical Events
 
 Combine proxy with direct tracking for non-critical events:
 
