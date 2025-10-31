@@ -6,3 +6,7 @@ export { PostHogClientProvider } from "./posthog/client.js";
 
 // PostHog client types only
 export type { PostHogConfig } from "posthog-js";
+
+// Bento client provider
+export { BentoClientProvider } from "./bento/client.js";
+export type { BentoClientConfig } from "./bento/client.js";

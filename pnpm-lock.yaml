@@ -8,6 +8,9 @@ importers:
 
   .:
     optionalDependencies:
+      '@bentonow/bento-node-sdk':
+        specifier: ^0.2.1
+        version: 0.2.1
       posthog-js:
         specifier: ^1.268.2
         version: 1.268.2
@@ -85,6 +88,10 @@ packages:
   '@bcoe/v8-coverage@1.0.2':
     resolution: {integrity: sha512-6zABk/ECA/QYSCQ1NGiVwwbQerUCZ+TQbp64Q3AgmfNvurHH0j8TtXa1qbShXA6qqkpAj4V5W8pP6mLe1mcMqA==}
     engines: {node: '>=18'}
+
+  '@bentonow/bento-node-sdk@0.2.1':
+    resolution: {integrity: sha512-fyZTPyfc2hJacOfaKM8l70QhXDJRrfuCO6GkKSmbN69tFh6/sVm1MDAlUMc1+DBVDFu0hWq/ZoQ60w1RsrqAmg==}
+    engines: {node: '>=12'}
 
   '@biomejs/biome@1.9.4':
     resolution: {integrity: sha512-1rkd7G70+o9KkTn5KLmDYXihGoTaIGO9PIIN2ZB7UJxFrWw04CZHPYiMRjYsaDvVV7hP1dYNRLxSANLaBFGpog==}
@@ -913,6 +920,9 @@ packages:
 
   core-js@3.42.0:
     resolution: {integrity: sha512-Sz4PP4ZA+Rq4II21qkNqOEDTDrCvcANId3xpIgB34NDkWc3UduWj2dqEtN9yZIq8Dk3HyPI33x9sqqU5C8sr0g==}
+
+  cross-fetch@4.1.0:
+    resolution: {integrity: sha512-uKm5PU+MHTootlWEY+mZ4vvXoCn4fLQxT9dSc1sXVMSFkINTJVN8cAQROpwcKm8bJ/c7rgZVIBWzH5T78sNZZw==}
 
   cross-spawn@7.0.6:
     resolution: {integrity: sha512-uV2QOWP2nWzsy2aMp8aRibhi9dlzF5Hgh5SHaB9OiTGEyDTiJJyx0uy51QXdyWbtAHNua4XJzUKca3OzKUd3vA==}
@@ -1865,6 +1875,13 @@ snapshots:
 
   '@bcoe/v8-coverage@1.0.2': {}
 
+  '@bentonow/bento-node-sdk@0.2.1':
+    dependencies:
+      cross-fetch: 4.1.0
+    transitivePeerDependencies:
+      - encoding
+    optional: true
+
   '@biomejs/biome@1.9.4':
     optionalDependencies:
       '@biomejs/cli-darwin-arm64': 1.9.4
@@ -2630,6 +2647,13 @@ snapshots:
   confbox@0.2.2: {}
 
   core-js@3.42.0:
+    optional: true
+
+  cross-fetch@4.1.0:
+    dependencies:
+      node-fetch: 2.7.0
+    transitivePeerDependencies:
+      - encoding
     optional: true
 
   cross-spawn@7.0.6:

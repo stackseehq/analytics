@@ -5,6 +5,7 @@ A highly typed, zero-dependency, provider-agnostic analytics library for TypeScr
 ## Table of Contents
 
 - [Features](#features)
+- [Providers](#providers)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
   - [1. Define Your Events](#1-define-your-events)
@@ -44,6 +45,34 @@ A highly typed, zero-dependency, provider-agnostic analytics library for TypeScr
 - 🌎 **Edge ready**: The server client is compatible with edge runtime (e.g. Cloudflare Workers, Vercel Edge functions)
 - 🔧 **Extensible**: Simple interface to add new providers
 
+## Providers
+
+The library includes built-in support for popular analytics services, with more coming soon:
+
+### Official Providers
+
+| Provider | Type | Documentation |
+|----------|------|---------------|
+| **PostHog** | Product Analytics | [docs/providers/posthog.md](./docs/providers/posthog.md) |
+| **Bento** | Email Marketing & Events | [docs/providers/bento.md](./docs/providers/bento.md) |
+
+### Community & Custom Providers
+
+Want to use a different analytics service? Check out our guide:
+
+**[Creating Custom Providers →](./docs/providers/custom-providers.md)**
+
+You can easily create providers for:
+- Google Analytics
+- Mixpanel
+- Amplitude
+- Segment
+- Customer.io
+- Loops
+- Any analytics service with a JavaScript SDK
+
+**[View all provider documentation →](./docs/providers/)**
+
 ## Installation
 
 ```bash
@@ -51,7 +80,12 @@ pnpm install @stacksee/analytics
 
 # For PostHog support
 pnpm install posthog-js posthog-node
+
+# For Bento support (server-side only)
+pnpm install @bentonow/bento-node-sdk
 ```
+
+> **See also:** [Provider Documentation](./docs/providers/) for detailed setup guides for each provider.
 
 ## Quick Start
 
@@ -705,32 +739,21 @@ export const appEvents = {
 
 ### Adding Custom Providers
 
-Implement the `AnalyticsProvider` interface to add support for other analytics services:
+Want to integrate with a different analytics service? See our comprehensive guide:
+
+**[Creating Custom Providers →](./docs/providers/custom-providers.md)**
+
+Quick example:
 
 ```typescript
 import { BaseAnalyticsProvider, BaseEvent, EventContext } from '@stacksee/analytics';
 
 export class GoogleAnalyticsProvider extends BaseAnalyticsProvider {
   name = 'GoogleAnalytics';
-  private measurementId: string;
 
-  constructor(config: { measurementId: string; debug?: boolean; enabled?: boolean }) {
-    super({ debug: config.debug, enabled: config.enabled });
-    this.measurementId = config.measurementId;
-  }
-
-  async initialize(): Promise<void> {
-    // Initialize GA
-  }
-
-  track(event: BaseEvent, context?: EventContext): void {
-    // Send event to GA
-  }
-
-  identify(userId: string, traits?: Record<string, unknown>): void {
-    // Set user properties in GA
-  }
-
+  async initialize(): Promise<void> { /* Initialize GA */ }
+  track(event: BaseEvent, context?: EventContext): void { /* Track event */ }
+  identify(userId: string, traits?: Record<string, unknown>): void { /* Identify user */ }
   // ... implement other required methods
 }
 ```
@@ -738,9 +761,9 @@ export class GoogleAnalyticsProvider extends BaseAnalyticsProvider {
 Then use it as a plugin in your configuration:
 
 ```typescript
-const analytics = await createClientAnalytics<typeof AppEvents>({
+const analytics = createClientAnalytics<typeof AppEvents>({
   providers: [
-    new PostHogClientProvider({ apiKey: 'xxx' }),
+    new PostHogClientProvider({ token: 'xxx' }),
     new GoogleAnalyticsProvider({ measurementId: 'xxx' })
   ]
 });
