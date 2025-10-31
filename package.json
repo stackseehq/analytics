@@ -1,6 +1,6 @@
 {
   "name": "@stacksee/analytics",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "A highly typed, provider-agnostic analytics library for TypeScript applications",
   "type": "module",
   "exports": {
@@ -73,6 +73,7 @@
   },
   "optionalDependencies": {
     "@bentonow/bento-node-sdk": "^0.2.1",
+    "pirsch-sdk": "^2.9.1",
     "posthog-js": "^1.268.2",
     "posthog-node": "^5.9.0"
   },

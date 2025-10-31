@@ -55,6 +55,7 @@ The library includes built-in support for popular analytics services, with more 
 |----------|------|---------------|
 | **PostHog** | Product Analytics | [docs/providers/posthog.md](./docs/providers/posthog.md) |
 | **Bento** | Email Marketing & Events | [docs/providers/bento.md](./docs/providers/bento.md) |
+| **Pirsch** | Privacy-Focused Web Analytics | [docs/providers/pirsch.md](./docs/providers/pirsch.md) |
 
 ### Community & Custom Providers
 
@@ -83,6 +84,9 @@ pnpm install posthog-js posthog-node
 
 # For Bento support (server-side only)
 pnpm install @bentonow/bento-node-sdk
+
+# For Pirsch support
+pnpm install pirsch-sdk
 ```
 
 > **See also:** [Provider Documentation](./docs/providers/) for detailed setup guides for each provider.

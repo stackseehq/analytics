@@ -10,3 +10,7 @@ export type { PostHogConfig } from "posthog-js";
 // Bento client provider
 export { BentoClientProvider } from "./bento/client.js";
 export type { BentoClientConfig } from "./bento/client.js";
+
+// Pirsch client provider
+export { PirschClientProvider } from "./pirsch/client.js";
+export type { PirschClientConfig } from "./pirsch/client.js";

@@ -53,6 +53,29 @@ new BentoClientProvider({
 
 ---
 
+### [Pirsch](./pirsch.md)
+Privacy-focused, cookie-free web analytics platform.
+
+**Use cases:** Privacy-compliant analytics, GDPR-friendly tracking, cookie-free monitoring
+
+**Installation:**
+```bash
+pnpm install pirsch-sdk
+```
+
+**Quick Start:**
+```typescript
+import { PirschClientProvider } from '@stacksee/analytics/providers/client';
+
+new PirschClientProvider({
+  identificationCode: 'your-pirsch-identification-code'
+})
+```
+
+[View full documentation →](./pirsch.md)
+
+---
+
 ## Creating Custom Providers
 
 Want to integrate with a different analytics service? Check out our comprehensive guide:
@@ -68,16 +91,18 @@ Learn how to:
 
 ## Provider Comparison
 
-| Feature | PostHog | Bento |
-|---------|---------|-------|
-| **Analytics** | ✅ Advanced | ✅ Basic |
-| **Email Marketing** | ❌ | ✅ |
-| **Feature Flags** | ✅ | ❌ |
-| **Session Replay** | ✅ | ❌ |
-| **User Segmentation** | ✅ | ✅ |
-| **Real-time Events** | ✅ | ⚠️ 1-3min delay |
-| **Self-hosted Option** | ✅ | ❌ |
-| **Free Tier** | ✅ Generous | ✅ Limited |
+| Feature | PostHog | Bento | Pirsch |
+|---------|---------|-------|--------|
+| **Analytics** | ✅ Advanced | ✅ Basic | ✅ Privacy-focused |
+| **Email Marketing** | ❌ | ✅ | ❌ |
+| **Feature Flags** | ✅ | ❌ | ❌ |
+| **Session Replay** | ✅ | ❌ | ❌ |
+| **User Segmentation** | ✅ | ✅ | ⚠️ Limited |
+| **Real-time Events** | ✅ | ⚠️ 1-3min delay | ✅ |
+| **Cookie-Free** | ❌ | ❌ | ✅ |
+| **Privacy-First** | ⚠️ Configurable | ⚠️ Standard | ✅ GDPR Native |
+| **Self-hosted Option** | ✅ | ❌ | ✅ |
+| **Free Tier** | ✅ Generous | ✅ Limited | ✅ Trial |
 
 ## Using Multiple Providers
 
