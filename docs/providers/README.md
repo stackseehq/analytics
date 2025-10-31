@@ -76,6 +76,39 @@ new PirschClientProvider({
 
 ---
 
+### [Proxy Provider](./proxy.md)
+Route client-side events through your own server to bypass ad-blockers and gain server-side control.
+
+**Use cases:** Ad-blocker bypass, server-side enrichment, privacy control, unified tracking
+
+**Installation:**
+```bash
+# No additional dependencies - included in core library
+```
+
+**Quick Start:**
+```typescript
+// Client-side
+import { ProxyProvider } from '@stacksee/analytics/providers/client';
+
+new ProxyProvider({
+  endpoint: '/api/events',
+  batch: { size: 10, interval: 5000 }
+})
+
+// Server-side
+import { ingestProxyEvents } from '@stacksee/analytics/providers/server';
+
+export async function POST(req: Request) {
+  await ingestProxyEvents(req, serverAnalytics);
+  return new Response('OK');
+}
+```
+
+[View full documentation →](./proxy.md)
+
+---
+
 ## Creating Custom Providers
 
 Want to integrate with a different analytics service? Check out our comprehensive guide:

@@ -12,3 +12,7 @@ export type { BentoServerConfig, BentoAnalyticsOptions } from "./bento/server.js
 // Pirsch server provider
 export { PirschServerProvider } from "./pirsch/server.js";
 export type { PirschServerConfig } from "./pirsch/server.js";
+
+// Proxy helpers (for ingesting client-side events)
+export { ingestProxyEvents, createProxyHandler } from "./proxy/server.js";
+export type { IngestProxyEventsConfig } from "./proxy/server.js";
