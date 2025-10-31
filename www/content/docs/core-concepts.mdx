@@ -1,0 +1,499 @@
+---
+title: Core Concepts
+description: Understand the fundamental concepts of @stacksee/analytics
+---
+
+# Core Concepts
+
+Learn the core concepts that power @stacksee/analytics: Events, Providers, and User Context.
+
+## Events
+
+Events are the core of analytics tracking. They represent actions that happen in your application.
+
+### Defining Events
+
+Events are defined with full TypeScript support:
+
+```typescript
+import type { CreateEventDefinition, EventCollection } from '@stacksee/analytics';
+
+export const appEvents = {
+  userSignedUp: {
+    name: 'user_signed_up',      // Event name sent to providers
+    category: 'user',              // Optional category for organization
+    properties: {} as {            // Fully typed properties
+      email: string;
+      plan: 'free' | 'pro' | 'enterprise';
+      referralSource?: string;     // Optional properties with ?
+    }
+  }
+} as const satisfies EventCollection<Record<string, CreateEventDefinition<string>>>;
+```
+
+### Event Categories
+
+Organize events with predefined or custom categories:
+
+**Predefined Categories:**
+- `product` - Product-related events
+- `user` - User lifecycle events
+- `navigation` - Page views and navigation
+- `conversion` - Conversion and goals
+- `engagement` - Feature usage
+- `error` - Error tracking
+- `performance` - Performance monitoring
+
+**Custom Categories:**
+
+```typescript
+export const appEvents = {
+  aiResponseGenerated: {
+    name: 'ai_response_generated',
+    category: 'ai',  // Custom category
+    properties: {} as {
+      model: string;
+      tokensUsed: number;
+    }
+  }
+} as const;
+```
+
+### Tracking Events
+
+<Tabs items={['Client-Side', 'Server-Side']}>
+<Tab value="Client-Side">
+
+```typescript
+// Fire-and-forget (non-blocking)
+analytics.track('button_clicked', {
+  buttonId: 'cta',
+  location: 'hero'
+});
+
+// User continues immediately
+```
+
+</Tab>
+<Tab value="Server-Side">
+
+```typescript
+// Await for critical events
+await serverAnalytics.track('payment_processed', {
+  amount: 99.99,
+  currency: 'USD'
+}, {
+  userId: 'user-123',
+  user: {
+    email: 'user@example.com'
+  }
+});
+
+// Always shutdown in serverless
+await serverAnalytics.shutdown();
+```
+
+</Tab>
+</Tabs>
+
+## Providers
+
+Providers are plugins that send your events to analytics services. The library uses a plugin architecture that allows you to:
+
+- Use multiple providers simultaneously
+- Switch providers without changing tracking code
+- Create custom providers for any service
+
+### Available Providers
+
+<Cards>
+  <Card title="PostHog" href="/docs/providers/posthog">
+    Product analytics with feature flags and session replay
+  </Card>
+  <Card title="Bento" href="/docs/providers/bento">
+    Email marketing and automation with event tracking
+  </Card>
+  <Card title="Pirsch" href="/docs/providers/pirsch">
+    Privacy-focused, cookie-free web analytics
+  </Card>
+  <Card title="Proxy Provider" href="/docs/providers/proxy">
+    Route events through your server to bypass ad-blockers
+  </Card>
+  <Card title="Custom Providers" href="/docs/providers/custom">
+    Create your own provider for any analytics service
+  </Card>
+</Cards>
+
+### Using Multiple Providers
+
+Send events to multiple services with one call:
+
+```typescript
+const analytics = createClientAnalytics({
+  providers: [
+    new PostHogClientProvider({ token: 'xxx' }),
+    new BentoClientProvider({ siteUuid: 'xxx' }),
+    new PirschClientProvider({ identificationCode: 'xxx' })
+  ]
+});
+
+// All three providers receive this event
+analytics.track('user_signed_up', {
+  email: 'user@example.com',
+  plan: 'pro'
+});
+```
+
+### Provider Lifecycle
+
+All providers implement these methods:
+
+```typescript
+interface AnalyticsProvider {
+  initialize(): Promise<void> | void;     // Initialize the provider
+  track(event, context?): Promise<void> | void;   // Track an event
+  identify(userId, traits?): Promise<void> | void; // Identify a user
+  pageView(properties?, context?): Promise<void> | void; // Track page view
+  pageLeave(properties?, context?): Promise<void> | void; // Track page leave
+  reset(): Promise<void> | void;          // Reset user session
+  shutdown?(): Promise<void>;             // Cleanup (server-side)
+}
+```
+
+## User Context
+
+User context allows you to attach user information to events. The library handles this differently for client and server.
+
+### Client-Side (Stateful)
+
+The client maintains user state across page interactions:
+
+```typescript
+// 1. Identify the user (usually after login)
+analytics.identify('user-123', {
+  email: 'user@example.com',
+  name: 'John Doe',
+  plan: 'pro',
+  company: 'Acme Corp'
+});
+
+// 2. Track events - user context is automatically included
+analytics.track('button_clicked', {
+  buttonId: 'checkout'
+});
+
+// Behind the scenes, providers receive:
+// {
+//   event: { action: 'button_clicked', ... },
+//   context: {
+//     user: {
+//       userId: 'user-123',
+//       email: 'user@example.com',
+//       traits: { name: '...', plan: '...', company: '...' }
+//     }
+//   }
+// }
+
+// 3. Reset on logout
+analytics.reset();
+```
+
+### Server-Side (Stateless)
+
+The server doesn't maintain state - pass user context with each event:
+
+```typescript
+await serverAnalytics.track('api_request', {
+  endpoint: '/users',
+  method: 'POST'
+}, {
+  userId: 'user-123',
+  user: {
+    email: 'user@example.com',
+    traits: {
+      plan: 'pro',
+      company: 'Acme Corp'
+    }
+  }
+});
+```
+
+### Type-Safe User Traits
+
+Define a type for your user traits:
+
+```typescript
+interface UserTraits {
+  email: string;
+  name: string;
+  plan: 'free' | 'pro' | 'enterprise';
+  company?: string;
+  role?: 'admin' | 'user' | 'viewer';
+}
+
+// Use it in your analytics instance
+const analytics = createClientAnalytics<typeof appEvents, UserTraits>({
+  providers: [/* ... */]
+});
+
+// Now identify() is fully typed!
+analytics.identify('user-123', {
+  email: 'user@example.com',
+  name: 'John Doe',
+  plan: 'pro',  // ✅ Autocomplete works!
+  role: 'admin'
+});
+```
+
+### Client vs Server Comparison
+
+| Feature | Client | Server |
+|---------|--------|--------|
+| **State** | Stateful - persists after `identify()` | Stateless - pass per request |
+| **Usage** | Call `identify()` once | Pass `user` with each `track()` |
+| **Reset** | Call `reset()` on logout | No reset needed |
+| **Use Case** | Single user per session | Multiple users per instance |
+
+## Event Context
+
+Beyond user context, you can attach additional metadata to events:
+
+```typescript
+await serverAnalytics.track('api_request', {
+  endpoint: '/users'
+}, {
+  userId: 'user-123',
+  user: {
+    email: 'user@example.com'
+  },
+  context: {
+    page: {
+      path: '/api/users',
+      title: 'User API',
+      referrer: 'https://example.com'
+    },
+    device: {
+      userAgent: req.headers['user-agent'],
+      language: 'en-US'
+    },
+    custom: {
+      region: 'us-east-1',
+      version: '1.0.0'
+    }
+  }
+});
+```
+
+## Client vs Server
+
+The library provides separate APIs for client and server environments:
+
+### When to Use Client-Side
+
+- Browser interactions (clicks, form submissions)
+- Page views and navigation
+- User behavior tracking
+- Client-side state changes
+
+```typescript
+import { createClientAnalytics } from '@stacksee/analytics/client';
+import { PostHogClientProvider } from '@stacksee/analytics/providers/client';
+```
+
+### When to Use Server-Side
+
+- API endpoints
+- Background jobs
+- Server actions
+- Events that need server context (IP, auth data)
+
+```typescript
+import { createServerAnalytics } from '@stacksee/analytics/server';
+import { PostHogServerProvider } from '@stacksee/analytics/providers/server';
+```
+
+### Import Paths
+
+Always use environment-specific imports to avoid bundling issues:
+
+<Tabs items={['Client', 'Server']}>
+<Tab value="Client">
+
+```typescript
+// ✅ Correct - only browser code
+import { createClientAnalytics } from '@stacksee/analytics/client';
+import { PostHogClientProvider } from '@stacksee/analytics/providers/client';
+
+// ❌ Wrong - may bundle Node.js code
+import { PostHogClientProvider } from '@stacksee/analytics/providers';
+```
+
+</Tab>
+<Tab value="Server">
+
+```typescript
+// ✅ Correct - only Node.js code
+import { createServerAnalytics } from '@stacksee/analytics/server';
+import { PostHogServerProvider } from '@stacksee/analytics/providers/server';
+
+// ❌ Wrong - may bundle browser code
+import { PostHogServerProvider } from '@stacksee/analytics/providers';
+```
+
+</Tab>
+</Tabs>
+
+## Async Tracking
+
+The `track()` method returns a Promise, giving you control over execution:
+
+### Fire-and-Forget (Client-Side)
+
+```typescript
+// Don't await - events send in background
+analytics.track('button_clicked', {
+  buttonId: 'checkout'
+});
+
+// User interaction continues immediately
+```
+
+### Await for Critical Events (Server-Side)
+
+```typescript
+// For critical events that MUST complete
+try {
+  await serverAnalytics.track('payment_processed', {
+    amount: 99.99,
+    transactionId: 'tx-123'
+  });
+
+  return res.json({ success: true });
+} catch (error) {
+  await serverAnalytics.track('payment_failed', {
+    error: error.message
+  });
+
+  return res.status(500).json({ error: 'Payment failed' });
+}
+```
+
+### Serverless Environments
+
+Use `waitUntil` for non-blocking tracking in serverless:
+
+```typescript
+import { waitUntil } from '@vercel/functions';
+
+export async function handler(req, res) {
+  const result = await processRequest(req);
+
+  // Track in background without blocking response
+  waitUntil(
+    serverAnalytics.track('api_request', {
+      endpoint: req.url
+    }).then(() => serverAnalytics.shutdown())
+  );
+
+  return res.json(result);
+}
+```
+
+## Best Practices
+
+### 1. Define Events in One Place
+
+```typescript
+// ✅ Good - centralized event definitions
+// lib/events.ts
+export const appEvents = { /* all events */ };
+
+// ❌ Bad - events scattered across codebase
+analytics.track('some_event', { /* ... */ }); // What properties does this accept?
+```
+
+### 2. Use Const Assertions
+
+```typescript
+// ✅ Good - better type inference
+export const appEvents = {
+  /* ... */
+} as const satisfies EventCollection<Record<string, CreateEventDefinition<string>>>;
+
+// ❌ Bad - loses type information
+export const appEvents = {
+  /* ... */
+};
+```
+
+### 3. Initialize Early
+
+```typescript
+// ✅ Good - initialize in app entry point
+// app/layout.tsx or app/providers.tsx
+const analytics = createClientAnalytics({ /* ... */ });
+
+// ❌ Bad - initialize on every component render
+function Component() {
+  const analytics = createClientAnalytics({ /* ... */ }); // Recreated every render!
+}
+```
+
+### 4. Handle Errors Gracefully
+
+```typescript
+// The library catches provider errors internally
+// One provider's failure won't affect others
+analytics.track('event', { data: 'value' });
+
+// Even if one provider fails, others still receive the event
+```
+
+### 5. Respect Privacy
+
+```typescript
+// Implement consent management
+const analytics = createClientAnalytics({
+  providers: [
+    new PostHogClientProvider({
+      token: 'xxx',
+      enabled: userHasConsented // Only track if user consented
+    })
+  ]
+});
+```
+
+### 6. Document Your Events
+
+```typescript
+export const appEvents = {
+  // Track when user completes onboarding flow
+  // Triggered: After final onboarding step
+  // Used by: Marketing team for conversion tracking
+  onboardingCompleted: {
+    name: 'onboarding_completed',
+    category: 'user',
+    properties: {} as {
+      steps: number;
+      duration: number;
+    }
+  }
+} as const;
+```
+
+## Next Steps
+
+<Cards>
+  <Card title="Provider Guides" href="/docs/providers">
+    Setup guides for each analytics provider
+  </Card>
+  <Card title="Framework Guides" href="/docs/guides/nextjs">
+    Integration guides for popular frameworks
+  </Card>
+  <Card title="Advanced Patterns" href="/docs/guides/advanced">
+    Serverless, batching, and advanced usage
+  </Card>
+  <Card title="API Reference" href="/docs/api">
+    Complete API documentation
+  </Card>
+</Cards>

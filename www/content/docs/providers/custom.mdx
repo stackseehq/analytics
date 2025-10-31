@@ -1,0 +1,103 @@
+---
+title: Custom Providers
+description: Create your own analytics provider for any service
+---
+
+# Custom Providers
+
+Create custom providers to integrate @stacksee/analytics with any analytics service.
+
+## Basic Provider Example
+
+```typescript
+import { BaseAnalyticsProvider, BaseEvent, EventContext } from '@stacksee/analytics';
+
+export class CustomProvider extends BaseAnalyticsProvider {
+  name = 'CustomProvider';
+  private client?: any;
+
+  constructor(config: { apiKey: string; debug?: boolean }) {
+    super({ debug: config.debug });
+    // Store config
+  }
+
+  async initialize(): Promise<void> {
+    if (!this.isEnabled()) return;
+    // Initialize your SDK
+    this.log('Initialized successfully');
+  }
+
+  track(event: BaseEvent, context?: EventContext): void {
+    if (!this.isEnabled() || !this.client) return;
+
+    // Send event to your service
+    this.client.track(event.action, event.properties);
+    this.log('Tracked event', { event });
+  }
+
+  identify(userId: string, traits?: Record<string, unknown>): void {
+    if (!this.isEnabled() || !this.client) return;
+
+    this.client.identify(userId, traits);
+    this.log('Identified user', { userId, traits });
+  }
+
+  pageView(properties?: Record<string, unknown>, context?: EventContext): void {
+    if (!this.isEnabled() || !this.client) return;
+
+    this.client.page(properties);
+    this.log('Tracked page view', { properties });
+  }
+
+  reset(): void {
+    if (!this.isEnabled() || !this.client) return;
+
+    this.client.reset();
+    this.log('Reset user session');
+  }
+}
+```
+
+## Using Your Custom Provider
+
+```typescript
+import { createClientAnalytics } from '@stacksee/analytics/client';
+import { CustomProvider } from './custom-provider';
+
+const analytics = createClientAnalytics({
+  providers: [
+    new CustomProvider({
+      apiKey: 'your-api-key',
+      debug: true
+    })
+  ]
+});
+```
+
+## Provider Interface
+
+All providers must implement:
+
+```typescript
+interface AnalyticsProvider {
+  initialize(): Promise<void> | void;
+  track(event: BaseEvent, context?: EventContext): Promise<void> | void;
+  identify(userId: string, traits?: Record<string, unknown>): Promise<void> | void;
+  pageView(properties?: Record<string, unknown>, context?: EventContext): Promise<void> | void;
+  pageLeave?(properties?: Record<string, unknown>, context?: EventContext): Promise<void> | void;
+  reset(): Promise<void> | void;
+  shutdown?(): Promise<void>;
+}
+```
+
+## Best Practices
+
+1. **Extend BaseAnalyticsProvider** - Get built-in debug logging
+2. **Check isEnabled()** - Respect enabled/disabled state
+3. **Handle errors gracefully** - Don't throw, log instead
+4. **Type your config** - Export configuration interfaces
+5. **Document your provider** - Add JSDoc comments
+
+## Resources
+
+See the full [Custom Provider Guide](../../docs/providers/custom-providers.md) in the repository for detailed examples and advanced patterns.

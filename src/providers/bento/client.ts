@@ -107,8 +107,9 @@ export class BentoClientProvider extends BaseAnalyticsProvider {
 			}
 
 			const script = document.createElement("script");
-			script.src = `https://cdn.bentonow.com/v1/${this.config.siteUuid}/bento.js`;
+			script.src = `https://fast.bentonow.com?site_uuid=${this.config.siteUuid}`;
 			script.async = true;
+			script.defer = true;
 			script.onload = () => {
 				this.scriptLoaded = true;
 				resolve();

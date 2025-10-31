@@ -1,0 +1,72 @@
+---
+title: PostHog Provider
+description: Product analytics with feature flags and session replay
+---
+
+# PostHog Provider
+
+PostHog is an open-source product analytics platform with powerful features like feature flags, session replay, and advanced analytics.
+
+## Installation
+
+```bash
+pnpm install @stacksee/analytics posthog-js posthog-node
+```
+
+## Client-Side Usage
+
+```typescript
+import { createClientAnalytics } from '@stacksee/analytics/client';
+import { PostHogClientProvider } from '@stacksee/analytics/providers/client';
+
+const analytics = createClientAnalytics({
+  providers: [
+    new PostHogClientProvider({
+      token: 'your-posthog-project-api-key',
+      api_host: 'https://app.posthog.com', // optional
+      debug: false
+    })
+  ]
+});
+
+await analytics.initialize();
+```
+
+## Server-Side Usage
+
+```typescript
+import { createServerAnalytics } from '@stacksee/analytics/server';
+import { PostHogServerProvider } from '@stacksee/analytics/providers/server';
+
+const serverAnalytics = createServerAnalytics({
+  providers: [
+    new PostHogServerProvider({
+      apiKey: process.env.POSTHOG_API_KEY!,
+      host: 'https://app.posthog.com',
+      flushAt: 20,
+      flushInterval: 10000
+    })
+  ]
+});
+
+// Track events
+await serverAnalytics.track('user_signed_up', {
+  userId: 'user-123',
+  plan: 'pro'
+}, {
+  userId: 'user-123'
+});
+
+// Always shutdown to flush events
+await serverAnalytics.shutdown();
+```
+
+## Configuration Options
+
+The PostHogClientProvider accepts all PostHog JS SDK options. See the [PostHog docs](https://posthog.com/docs/libraries/js) for details.
+
+## Resources
+
+- [PostHog Documentation](https://posthog.com/docs)
+- [PostHog JavaScript SDK](https://posthog.com/docs/libraries/js)
+- [PostHog Node.js SDK](https://posthog.com/docs/libraries/node)

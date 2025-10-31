@@ -1,0 +1,64 @@
+---
+title: Bento Provider
+description: Email marketing and automation with event tracking
+---
+
+# Bento Provider
+
+Bento is an email marketing and automation platform with built-in event tracking capabilities.
+
+## Installation
+
+```bash
+# Client-side: No installation needed (uses CDN)
+# Server-side:
+pnpm install @bentonow/bento-node-sdk
+```
+
+## Client-Side Usage
+
+```typescript
+import { createClientAnalytics } from '@stacksee/analytics/client';
+import { BentoClientProvider } from '@stacksee/analytics/providers/client';
+
+const analytics = createClientAnalytics({
+  providers: [
+    new BentoClientProvider({
+      siteUuid: 'your-bento-site-uuid',
+      debug: false
+    })
+  ]
+});
+
+await analytics.initialize();
+```
+
+## Server-Side Usage
+
+```typescript
+import { createServerAnalytics } from '@stacksee/analytics/server';
+import { BentoServerProvider } from '@stacksee/analytics/providers/server';
+
+const serverAnalytics = createServerAnalytics({
+  providers: [
+    new BentoServerProvider({
+      siteUuid: process.env.BENTO_SITE_UUID!,
+      authentication: {
+        publishableKey: process.env.BENTO_PUBLISHABLE_KEY!,
+        secretKey: process.env.BENTO_SECRET_KEY!
+      }
+    })
+  ]
+});
+```
+
+## Important Notes
+
+- Bento requires an email address for tracking events
+- Events may take 1-3 minutes to appear (batch API)
+- User context is automatically extracted from `identify()` calls
+
+## Resources
+
+- [Bento Documentation](https://docs.bentonow.com/)
+- [Bento SDK on GitHub](https://github.com/bentonow/bento-node-sdk)

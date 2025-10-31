@@ -1,6 +1,6 @@
 {
   "name": "@stacksee/analytics",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "description": "A highly typed, provider-agnostic analytics library for TypeScript applications",
   "type": "module",
   "exports": {
@@ -36,6 +36,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "build": "vite build",
+    "dev": "pnpm --filter @stacksee/docs dev",
+    "build:docs": "pnpm --filter @stacksee/docs build",
     "deploy": "npm publish",
     "typecheck": "tsc --noEmit",
     "ci:publish": "pnpm build && changeset publish",
@@ -47,6 +49,8 @@
     "analytics",
     "typescript",
     "posthog",
+    "bento",
+    "pirsch",
     "tracking",
     "events",
     "type-safe"
@@ -81,9 +85,5 @@
     "pnpm": ">=9.0.0",
     "node": ">=20"
   },
-  "packageManager": "pnpm@9.14.4",
-  "dependencies": {
-    "@tailwindcss/vite": "^4.1.16",
-    "tailwindcss": "^4.1.16"
-  }
+  "packageManager": "pnpm@9.14.4"
 }

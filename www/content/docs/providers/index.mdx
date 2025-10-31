@@ -1,0 +1,254 @@
+---
+title: Providers Overview
+description: Choose and configure analytics providers for your application
+---
+
+# Providers Overview
+
+Providers are plugins that send your events to analytics services. @stacksee/analytics includes official support for popular services and makes it easy to add custom providers.
+
+## Available Providers
+
+<Cards>
+  <Card title="PostHog" href="/docs/providers/posthog" icon={<ChartBarIcon />}>
+    Open-source product analytics with feature flags and session replay
+  </Card>
+  <Card title="Bento" href="/docs/providers/bento" icon={<MailIcon />}>
+    Email marketing and automation platform with event tracking
+  </Card>
+  <Card title="Pirsch" href="/docs/providers/pirsch" icon={<ShieldCheckIcon />}>
+    Privacy-focused, cookie-free web analytics
+  </Card>
+  <Card title="Proxy Provider" href="/docs/providers/proxy" icon={<ServerIcon />}>
+    Route events through your server to bypass ad-blockers
+  </Card>
+</Cards>
+
+## Provider Comparison
+
+| Provider | Type | Best For | Privacy | Free Tier |
+|----------|------|----------|---------|-----------|
+| **PostHog** | Product Analytics | Feature flags, session replay, funnels | Configurable | ✅ Generous |
+| **Bento** | Email Marketing | Email campaigns, user segmentation | Standard | ✅ Limited |
+| **Pirsch** | Web Analytics | Cookie-free tracking, GDPR compliance | ✅ Privacy-first | Trial only |
+
+## Feature Comparison
+
+| Feature | PostHog | Bento | Pirsch |
+|---------|---------|-------|--------|
+| **Analytics** | ✅ Advanced | ✅ Basic | ✅ Privacy-focused |
+| **Email Marketing** | ❌ | ✅ | ❌ |
+| **Feature Flags** | ✅ | ❌ | ❌ |
+| **Session Replay** | ✅ | ❌ | ❌ |
+| **User Segmentation** | ✅ | ✅ | ⚠️ Limited |
+| **Real-time Events** | ✅ | ⚠️ 1-3min delay | ✅ |
+| **Cookie-Free** | ❌ | ❌ | ✅ |
+| **Self-hosted** | ✅ | ❌ | ✅ |
+
+## Quick Setup
+
+### PostHog
+
+```bash
+pnpm install posthog-js posthog-node
+```
+
+```typescript
+import { PostHogClientProvider } from '@stacksee/analytics/providers/client';
+
+new PostHogClientProvider({
+  token: 'your-posthog-api-key',
+  api_host: 'https://app.posthog.com'
+})
+```
+
+[Full PostHog Documentation →](/docs/providers/posthog)
+
+### Bento
+
+```bash
+# Client: No installation (uses CDN)
+# Server: pnpm install @bentonow/bento-node-sdk
+```
+
+```typescript
+import { BentoClientProvider } from '@stacksee/analytics/providers/client';
+
+new BentoClientProvider({
+  siteUuid: 'your-bento-site-uuid'
+})
+```
+
+[Full Bento Documentation →](/docs/providers/bento)
+
+### Pirsch
+
+```bash
+pnpm install pirsch-sdk
+```
+
+```typescript
+import { PirschClientProvider } from '@stacksee/analytics/providers/client';
+
+new PirschClientProvider({
+  identificationCode: 'your-pirsch-identification-code',
+  hostname: 'example.com'
+})
+```
+
+[Full Pirsch Documentation →](/docs/providers/pirsch)
+
+## Using Multiple Providers
+
+Combine providers to leverage different capabilities:
+
+```typescript
+import { createClientAnalytics } from '@stacksee/analytics/client';
+import {
+  PostHogClientProvider,
+  BentoClientProvider
+} from '@stacksee/analytics/providers/client';
+
+const analytics = createClientAnalytics({
+  providers: [
+    // PostHog for product analytics and feature flags
+    new PostHogClientProvider({
+      token: import.meta.env.VITE_POSTHOG_KEY
+    }),
+
+    // Bento for email marketing automation
+    new BentoClientProvider({
+      siteUuid: import.meta.env.VITE_BENTO_SITE_UUID
+    })
+  ]
+});
+
+// Events sent to all providers
+analytics.track('user_signed_up', {
+  email: 'user@example.com',
+  plan: 'pro'
+});
+```
+
+## Environment-Specific Imports
+
+Always use the correct import path to avoid bundling issues:
+
+<Tabs items={['Client-Side', 'Server-Side']}>
+<Tab value="Client-Side">
+
+```typescript
+// ✅ Correct - only browser-compatible code
+import { PostHogClientProvider } from '@stacksee/analytics/providers/client';
+
+// ❌ Wrong - may bundle Node.js dependencies
+import { PostHogClientProvider } from '@stacksee/analytics/providers';
+```
+
+</Tab>
+<Tab value="Server-Side">
+
+```typescript
+// ✅ Correct - only Node.js code
+import { PostHogServerProvider } from '@stacksee/analytics/providers/server';
+
+// ❌ Wrong - may bundle browser code
+import { PostHogServerProvider } from '@stacksee/analytics/providers';
+```
+
+</Tab>
+</Tabs>
+
+## Configuration Best Practices
+
+### 1. Use Environment Variables
+
+```typescript
+new PostHogClientProvider({
+  token: import.meta.env.VITE_POSTHOG_KEY,  // Vite
+  // OR
+  token: process.env.NEXT_PUBLIC_POSTHOG_KEY  // Next.js
+})
+```
+
+### 2. Enable Debug in Development
+
+```typescript
+new PostHogClientProvider({
+  token: 'xxx',
+  debug: import.meta.env.DEV  // or process.env.NODE_ENV === 'development'
+})
+```
+
+### 3. Conditional Providers
+
+```typescript
+const providers = [
+  new PostHogClientProvider({ token: 'xxx' })
+];
+
+// Only add Bento in production
+if (import.meta.env.PROD) {
+  providers.push(new BentoClientProvider({ siteUuid: 'xxx' }));
+}
+
+const analytics = createClientAnalytics({ providers });
+```
+
+### 4. Graceful Degradation
+
+```typescript
+const analytics = createClientAnalytics({
+  providers: [
+    new PostHogClientProvider({
+      token: 'xxx',
+      enabled: !!import.meta.env.VITE_POSTHOG_KEY  // Disable if no key
+    })
+  ]
+});
+```
+
+## Custom Providers
+
+Want to integrate with a different analytics service? Create a custom provider:
+
+```typescript
+import { BaseAnalyticsProvider, BaseEvent, EventContext } from '@stacksee/analytics';
+
+export class CustomProvider extends BaseAnalyticsProvider {
+  name = 'CustomProvider';
+
+  async initialize(): Promise<void> {
+    // Initialize your SDK
+  }
+
+  track(event: BaseEvent, context?: EventContext): void {
+    // Send event to your service
+  }
+
+  identify(userId: string, traits?: Record<string, unknown>): void {
+    // Identify user
+  }
+
+  // ... implement other required methods
+}
+```
+
+[Learn more about creating custom providers →](/docs/providers/custom)
+
+## Next Steps
+
+<Cards>
+  <Card title="PostHog Provider" href="/docs/providers/posthog">
+    Product analytics with feature flags
+  </Card>
+  <Card title="Bento Provider" href="/docs/providers/bento">
+    Email marketing and automation
+  </Card>
+  <Card title="Pirsch Provider" href="/docs/providers/pirsch">
+    Privacy-focused web analytics
+  </Card>
+  <Card title="Custom Providers" href="/docs/providers/custom">
+    Create your own provider
+  </Card>
+</Cards>

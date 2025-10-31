@@ -1,0 +1,61 @@
+---
+title: Pirsch Provider
+description: Privacy-focused, cookie-free web analytics
+---
+
+# Pirsch Provider
+
+Pirsch is a privacy-friendly, cookie-free web analytics platform that's GDPR compliant by design.
+
+## Installation
+
+```bash
+pnpm install pirsch-sdk
+```
+
+## Client-Side Usage
+
+```typescript
+import { createClientAnalytics } from '@stacksee/analytics/client';
+import { PirschClientProvider } from '@stacksee/analytics/providers/client';
+
+const analytics = createClientAnalytics({
+  providers: [
+    new PirschClientProvider({
+      identificationCode: 'your-pirsch-identification-code',
+      hostname: 'example.com'
+    })
+  ]
+});
+
+await analytics.initialize();
+```
+
+## Server-Side Usage
+
+```typescript
+import { createServerAnalytics } from '@stacksee/analytics/server';
+import { PirschServerProvider } from '@stacksee/analytics/providers/server';
+
+const serverAnalytics = createServerAnalytics({
+  providers: [
+    new PirschServerProvider({
+      hostname: 'example.com',
+      clientSecret: process.env.PIRSCH_ACCESS_KEY!, // or client secret
+      protocol: 'https'
+    })
+  ]
+});
+```
+
+## Privacy Features
+
+- ✅ No cookies
+- ✅ IP addresses anonymized
+- ✅ GDPR, CCPA, and PECR compliant
+- ✅ No cross-site tracking
+
+## Resources
+
+- [Pirsch Documentation](https://docs.pirsch.io/)
+- [Pirsch JavaScript SDK](https://github.com/pirsch-analytics/pirsch-js-sdk)

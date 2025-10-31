@@ -1,0 +1,78 @@
+---
+title: Proxy Provider
+description: Route events through your server to bypass ad-blockers
+---
+
+# Proxy Provider
+
+The Proxy Provider routes client-side events through your own server endpoint, solving issues like ad-blockers and providing server-side control.
+
+## Benefits
+
+- **Ad-blocker bypass** - Events go through your domain
+- **Server enrichment** - Add server context to events
+- **Privacy control** - Data flows through your infrastructure
+- **Unified tracking** - Same client API, server-side processing
+
+## Quick Setup
+
+### 1. Client-Side
+
+```typescript
+import { createClientAnalytics } from '@stacksee/analytics/client';
+import { ProxyProvider } from '@stacksee/analytics/providers/client';
+
+const analytics = createClientAnalytics({
+  providers: [
+    new ProxyProvider({
+      endpoint: '/api/events',
+      batch: {
+        size: 10,
+        interval: 5000
+      }
+    })
+  ]
+});
+
+// Events batched and sent to your server
+analytics.track('button_clicked', {
+  buttonId: 'signup-cta'
+});
+```
+
+### 2. Server-Side
+
+```typescript
+// app/api/events/route.ts
+import { createServerAnalytics } from '@stacksee/analytics/server';
+import {
+  PirschServerProvider,
+  ingestProxyEvents
+} from '@stacksee/analytics/providers/server';
+
+const serverAnalytics = createServerAnalytics({
+  providers: [
+    new PirschServerProvider({
+      hostname: 'example.com',
+      clientSecret: process.env.PIRSCH_SECRET!
+    })
+  ]
+});
+
+export async function POST(req: Request) {
+  await ingestProxyEvents(req, serverAnalytics);
+  return new Response('OK');
+}
+```
+
+## How It Works
+
+```
+Client → ProxyProvider → Your Server → Analytics Services
+```
+
+Events are batched on the client, sent to your API, then forwarded to configured server providers.
+
+## Resources
+
+See the full [Proxy Provider documentation](../../docs/providers/proxy.md) in the repository for advanced patterns and configurations.
