@@ -10,6 +10,7 @@ This guide explains how to create custom analytics providers for the `@stacksee/
 - [Client-Side Provider](#client-side-provider)
 - [Server-Side Provider](#server-side-provider)
 - [Using User Context](#using-user-context)
+- [Handling Unsupported Methods](#handling-unsupported-methods)
 - [Error Handling](#error-handling)
 - [Best Practices](#best-practices)
 - [Testing Your Provider](#testing-your-provider)
@@ -327,6 +328,230 @@ track(event: BaseEvent, context?: EventContext): void {
     }
   });
 }
+```
+
+## Handling Unsupported Methods
+
+All providers **must implement all methods** from the `AnalyticsProvider` interface, even if the underlying SDK doesn't support certain operations. When your analytics service doesn't support a specific method, you have three options:
+
+### Option 1: Convert to Supported Format (Recommended)
+
+Translate the unsupported method into a format your SDK does support. This ensures no data is lost.
+
+```typescript
+// Example: Analytics service that only supports custom events
+export class EventOnlyProvider extends BaseAnalyticsProvider {
+  name = 'EventOnly';
+
+  // Service doesn't have native pageView - convert to track event
+  pageView(properties?: Record<string, unknown>, context?: EventContext): void {
+    if (!this.isEnabled() || !this.client) return;
+
+    // Convert pageView to a custom event
+    const event: BaseEvent = {
+      action: 'page_view',
+      category: 'navigation',
+      properties: {
+        path: context?.page?.path,
+        title: context?.page?.title,
+        referrer: context?.page?.referrer,
+        ...properties
+      },
+      timestamp: Date.now()
+    };
+
+    // Use the track method instead
+    this.track(event, context);
+    this.log('Converted pageView to track event');
+  }
+
+  // Service doesn't have native identify - convert to track event
+  identify(userId: string, traits?: Record<string, unknown>): void {
+    if (!this.isEnabled() || !this.client) return;
+
+    this.client.trackEvent('user_identified', {
+      userId,
+      ...traits
+    });
+
+    this.log('Converted identify to track event', { userId, traits });
+  }
+}
+```
+
+**Real-world example** - Bento converts pageViews to track events:
+
+```typescript
+// From BentoServerProvider
+pageView(properties?: Record<string, unknown>, context?: EventContext): void {
+  if (!this.isEnabled() || !this.initialized || !this.client) return;
+
+  const email = context?.user?.email || this.currentUserEmail || "anonymous@unknown.com";
+
+  // Bento doesn't have pageView - use track with "$pageview" type
+  this.client.V1.track({
+    email,
+    type: "$pageview",  // Special event type
+    details: {
+      ...properties,
+      ...(context?.page && {
+        path: context.page.path,
+        title: context.page.title,
+        referrer: context.page.referrer,
+      }),
+    },
+    fields: context?.user?.traits || {},
+  });
+}
+```
+
+### Option 2: Graceful Skip
+
+If the method truly cannot be supported and conversion doesn't make sense, silently skip it:
+
+```typescript
+export class MinimalProvider extends BaseAnalyticsProvider {
+  name = 'Minimal';
+
+  // Service only tracks page views, not custom events
+  track(event: BaseEvent, context?: EventContext): void {
+    if (!this.isEnabled() || !this.client) return;
+
+    // This provider only supports page views
+    this.log('Custom events not supported, skipping', { event });
+    return;
+  }
+
+  // Native support for page views
+  pageView(properties?: Record<string, unknown>, context?: EventContext): void {
+    if (!this.isEnabled() || !this.client) return;
+
+    this.client.trackPageView({
+      url: context?.page?.path,
+      title: context?.page?.title
+    });
+
+    this.log('Tracked page view');
+  }
+
+  // No native identify support
+  identify(userId: string, traits?: Record<string, unknown>): void {
+    if (!this.isEnabled() || !this.client) return;
+
+    // Silently skip - this service doesn't support user identification
+    this.log('Identify not supported, skipping', { userId });
+    return;
+  }
+}
+```
+
+### Option 3: Store for Later Use
+
+Some methods might not have a direct equivalent but can be stored and used with other events:
+
+```typescript
+export class StatefulProvider extends BaseAnalyticsProvider {
+  name = 'Stateful';
+  private currentUser?: { id: string; traits?: Record<string, unknown> };
+
+  // Service doesn't have separate identify - store for enrichment
+  identify(userId: string, traits?: Record<string, unknown>): void {
+    if (!this.isEnabled()) return;
+
+    // Store user info to enrich future events
+    this.currentUser = { id: userId, traits };
+    this.log('Stored user info for event enrichment', { userId, traits });
+  }
+
+  // Use stored user info when tracking
+  track(event: BaseEvent, context?: EventContext): void {
+    if (!this.isEnabled() || !this.client) return;
+
+    this.client.trackEvent(event.action, {
+      ...event.properties,
+      // Enrich with stored user data
+      ...(this.currentUser && {
+        userId: this.currentUser.id,
+        userTraits: this.currentUser.traits
+      })
+    });
+
+    this.log('Tracked event with user enrichment');
+  }
+
+  reset(): void {
+    this.currentUser = undefined;
+    this.log('Cleared stored user info');
+  }
+}
+```
+
+**Real-world example** - Bento stores email for use in track events:
+
+```typescript
+// From BentoServerProvider
+private currentUserEmail?: string;
+
+identify(userId: string, traits?: Record<string, unknown>): void {
+  const email = (traits?.email as string | undefined) || userId;
+  this.currentUserEmail = email;  // Store for later
+
+  this.client.V1.addSubscriber({ email, fields: traits });
+}
+
+track(event: BaseEvent, context?: EventContext): void {
+  // Use stored email if not in context
+  const email = context?.user?.email || this.currentUserEmail || "anonymous@unknown.com";
+
+  this.client.V1.track({ email, type: `$${event.action}`, ... });
+}
+```
+
+### When to Use Each Approach
+
+| Approach | Use When | Example |
+|----------|----------|---------|
+| **Convert** | The data can be represented in another format | PageView → Track event with `page_view` name |
+| **Skip** | The method is truly incompatible | Product analytics provider doesn't need `reset()` |
+| **Store** | Information is needed to enrich other events | Email from `identify()` used in all `track()` calls |
+
+### Important Considerations
+
+1. **Don't throw errors** - The library catches provider errors, but it's better to handle gracefully
+2. **Log skipped methods** - Use `this.log()` for debugging
+3. **Document limitations** - Tell users what methods are converted or skipped
+4. **Preserve data** - Prefer conversion over skipping when possible
+
+### Proxy Provider Compatibility
+
+When creating providers for use with the [Proxy Provider](./proxy.md), remember:
+
+- The Proxy Provider forwards **all event types** to all configured server providers
+- Your provider will receive `track`, `identify`, `pageView`, etc. regardless of what your SDK supports
+- Each provider handles events independently - one provider skipping an event doesn't affect others
+
+```typescript
+// Client sends all event types
+const analytics = createClientAnalytics({
+  providers: [
+    new ProxyProvider({ endpoint: '/api/events' })
+  ]
+});
+
+analytics.pageView();  // Sent to server
+analytics.track('click', {});  // Sent to server
+analytics.identify('user-123');  // Sent to server
+
+// Server receives all events and routes to each provider
+const serverAnalytics = createServerAnalytics({
+  providers: [
+    new PirschServerProvider({ ... }),    // Supports pageViews natively
+    new BentoServerProvider({ ... }),     // Converts pageViews to track
+    new CustomProvider({ ... })           // Maybe skips pageViews
+  ]
+});
+
+// Each provider handles the pageView according to its capabilities
 ```
 
 ## Error Handling

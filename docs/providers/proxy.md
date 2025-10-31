@@ -726,6 +726,91 @@ new PirschServerProvider({
 
 Your tracking code stays the same - just swap the provider!
 
+## Provider Method Compatibility
+
+### How the Proxy Handles Unsupported Methods
+
+The Proxy Provider sends all event types (`track`, `identify`, `pageView`, etc.) to your server endpoint, which then calls the corresponding methods on your configured server-side providers. **All providers receive all event types**, even if their SDK doesn't natively support certain methods.
+
+This is by design - the `BaseAnalyticsProvider` interface requires all providers to implement all methods. Providers handle unsupported methods in one of three ways:
+
+#### 1. Native Support
+
+The provider's SDK natively supports the method:
+
+```typescript
+// Pirsch has native pageView support via hit()
+pageView(properties?: Record<string, unknown>, context?: EventContext): void {
+  const hit: PirschHit = {
+    url: context?.page?.path || "https://pageview",
+    ip: extractedIp,
+    user_agent: userAgent
+  };
+
+  this.client.hit(hit); // Native SDK method
+}
+```
+
+#### 2. Conversion to Supported Format
+
+The provider converts unsupported methods to a supported format:
+
+```typescript
+// Bento doesn't have pageView - convert to track event
+pageView(properties?: Record<string, unknown>, context?: EventContext): void {
+  this.client.V1.track({
+    email,
+    type: "$pageview", // Convert to custom event
+    details: { ...properties, ...context?.page }
+  });
+}
+```
+
+#### 3. Graceful Skip
+
+The provider silently skips unsupported methods:
+
+```typescript
+// Hypothetical provider that only supports custom events
+pageView(properties?: Record<string, unknown>, context?: EventContext): void {
+  // This provider doesn't support pageViews
+  this.log("PageViews not supported, skipping");
+  return;
+}
+```
+
+### Implications for Multi-Provider Setups
+
+When using multiple providers with the Proxy Provider, each will handle events according to its capabilities:
+
+```typescript
+const serverAnalytics = createServerAnalytics({
+  providers: [
+    // Supports pageViews natively
+    new PirschServerProvider({ ... }),
+
+    // Converts pageViews to track events
+    new BentoServerProvider({ ... }),
+
+    // Hypothetical: Skips pageViews entirely
+    new EventOnlyProvider({ ... })
+  ]
+});
+
+// All three providers receive the pageView event
+// But they handle it differently based on their capabilities
+analytics.pageView();
+```
+
+**This is the correct behavior** - it allows you to:
+- Use a single client implementation
+- Mix providers with different capabilities
+- Let each provider handle events as appropriate
+
+### Custom Provider Development
+
+If you're creating a custom provider for use with the Proxy Provider, see the [Handling Unsupported Methods](./custom-providers.md#handling-unsupported-methods) section in the Custom Providers Guide.
+
 ## See Also
 
 - [Custom Providers Guide](./custom-providers.md)
