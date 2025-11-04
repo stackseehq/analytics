@@ -1,5 +1,20 @@
 # @stacksee/analytics
 
+## 0.9.6
+
+### Patch Changes
+
+- fix(pirsch): add screen dimensions, viewport, language, and platform tracking
+
+  - Added screen_width and screen_height mapping from client context
+  - Added sec_ch_viewport_width for viewport width tracking
+  - Added accept_language for language/locale tracking
+  - Added sec_ch_ua_mobile and sec_ch_ua_platform for device type and OS tracking
+  - Added timezone and browser to event metadata
+  - Updated EventContext type to include screen, viewport, userAgent, language, and timezone fields
+
+  This resolves the issue where screen data was showing as null in Pirsch analytics.
+
 ## 0.9.5
 
 ### Patch Changes

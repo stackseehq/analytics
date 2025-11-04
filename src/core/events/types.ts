@@ -46,6 +46,17 @@ export interface EventContext<
 		type?: string;
 		os?: string;
 		browser?: string;
+		userAgent?: string;
+		language?: string;
+		timezone?: string;
+		screen?: {
+			width?: number;
+			height?: number;
+		};
+		viewport?: {
+			width?: number;
+			height?: number;
+		};
 	};
 	utm?: {
 		source?: string;

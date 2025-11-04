@@ -149,6 +149,12 @@ export class PirschServerProvider extends BaseAnalyticsProvider {
 			user_agent: userAgent,
 			...(context?.page?.title && { title: context.page.title }),
 			...(context?.page?.referrer && { referrer: context.page.referrer }),
+			...(context?.device?.screen?.width && { screen_width: context.device.screen.width }),
+			...(context?.device?.screen?.height && { screen_height: context.device.screen.height }),
+			...(context?.device?.viewport?.width && { sec_ch_viewport_width: String(context.device.viewport.width) }),
+			...(context?.device?.language && { accept_language: context.device.language }),
+			...(context?.device?.type && { sec_ch_ua_mobile: context.device.type === 'mobile' || context.device.type === 'tablet' ? '?1' : '?0' }),
+			...(context?.device?.os && { sec_ch_ua_platform: context.device.os }),
 		};
 
 		// Filter properties to only include scalar values (string, number, boolean)
@@ -168,6 +174,8 @@ export class PirschServerProvider extends BaseAnalyticsProvider {
 			...(event.userId && { userId: event.userId }),
 			...(event.sessionId && { sessionId: event.sessionId }),
 			...(context?.user?.email && { user_email: context.user.email }),
+			...(context?.device?.timezone && { timezone: context.device.timezone }),
+			...(context?.device?.browser && { browser: context.device.browser }),
 		};
 
 		try {
@@ -207,6 +215,12 @@ export class PirschServerProvider extends BaseAnalyticsProvider {
 			user_agent: userAgent,
 			...(context?.page?.title && { title: context.page.title }),
 			...(context?.page?.referrer && { referrer: context.page.referrer }),
+			...(context?.device?.screen?.width && { screen_width: context.device.screen.width }),
+			...(context?.device?.screen?.height && { screen_height: context.device.screen.height }),
+			...(context?.device?.viewport?.width && { sec_ch_viewport_width: String(context.device.viewport.width) }),
+			...(context?.device?.language && { accept_language: context.device.language }),
+			...(context?.device?.type && { sec_ch_ua_mobile: context.device.type === 'mobile' || context.device.type === 'tablet' ? '?1' : '?0' }),
+			...(context?.device?.os && { sec_ch_ua_platform: context.device.os }),
 			...(properties && {
 				tags: Object.fromEntries(
 					Object.entries(properties).filter(
