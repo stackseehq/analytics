@@ -94,6 +94,7 @@ export class PirschServerProvider extends BaseAnalyticsProvider {
 
 		// Pirsch doesn't have a native identify method
 		// We can track an identification event instead with minimal hit data
+		// Note: identify() doesn't receive context, so we use dummy values
 		const hit: PirschHit = {
 			url: "https://identify",
 			ip: "0.0.0.0",
@@ -123,11 +124,29 @@ export class PirschServerProvider extends BaseAnalyticsProvider {
 	async track(event: BaseEvent, context?: EventContext): Promise<void> {
 		if (!this.isEnabled() || !this.initialized || !this.client) return;
 
+		// Extract IP and user-agent from enriched context (set by proxy handler)
+		// biome-ignore lint/suspicious/noExplicitAny: Extended context fields from proxy handler
+		const extendedContext = context as any;
+		const ip = extendedContext?.device?.ip || "0.0.0.0";
+		const userAgent =
+			extendedContext?.server?.userAgent || extendedContext?.device?.userAgent || "unknown";
+
+		// Build full URL (Pirsch requires full URLs, not just paths)
+		const url =
+			context?.page?.url ||
+			(context?.page?.protocol &&
+			context?.page?.host &&
+			context?.page?.path
+				? `${context.page.protocol}://${context.page.host}${context.page.path}`
+				: context?.page?.path
+					? `https://${this.config.hostname}${context.page.path}`
+					: "https://event");
+
 		// Build hit data - URL, IP, and User-Agent are required
 		const hit: PirschHit = {
-			url: context?.page?.path || "https://event",
-			ip: "0.0.0.0", // Server-side should provide real IP if available
-			user_agent: "analytics-library", // Server-side should provide real UA if available
+			url,
+			ip,
+			user_agent: userAgent,
 			...(context?.page?.title && { title: context.page.title }),
 			...(context?.page?.referrer && { referrer: context.page.referrer }),
 		};
@@ -163,11 +182,29 @@ export class PirschServerProvider extends BaseAnalyticsProvider {
 	pageView(properties?: Record<string, unknown>, context?: EventContext): void {
 		if (!this.isEnabled() || !this.initialized || !this.client) return;
 
+		// Extract IP and user-agent from enriched context (set by proxy handler)
+		// biome-ignore lint/suspicious/noExplicitAny: Extended context fields from proxy handler
+		const extendedContext = context as any;
+		const ip = extendedContext?.device?.ip || "0.0.0.0";
+		const userAgent =
+			extendedContext?.server?.userAgent || extendedContext?.device?.userAgent || "unknown";
+
+		// Build full URL (Pirsch requires full URLs, not just paths)
+		const url =
+			context?.page?.url ||
+			(context?.page?.protocol &&
+			context?.page?.host &&
+			context?.page?.path
+				? `${context.page.protocol}://${context.page.host}${context.page.path}`
+				: context?.page?.path
+					? `https://${this.config.hostname}${context.page.path}`
+					: "https://pageview");
+
 		// Build hit data - URL, IP, and User-Agent are required
 		const hit: PirschHit = {
-			url: context?.page?.path || "https://pageview",
-			ip: "0.0.0.0", // Server-side should provide real IP if available
-			user_agent: "analytics-library", // Server-side should provide real UA if available
+			url,
+			ip,
+			user_agent: userAgent,
 			...(context?.page?.title && { title: context.page.title }),
 			...(context?.page?.referrer && { referrer: context.page.referrer }),
 			...(properties && {

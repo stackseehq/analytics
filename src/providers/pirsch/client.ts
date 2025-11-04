@@ -4,8 +4,16 @@ import { isBrowser } from "@/utils/environment.js";
 
 // Pirsch client-side types - based on pirsch-sdk/web
 interface PirschWebClient {
-	hit(): Promise<void>;
-	event(name: string, duration?: number, meta?: Record<string, unknown>): Promise<void>;
+	hit(data?: {
+		url?: string;
+		title?: string;
+		tags?: Record<string, string | number | boolean>;
+	}): Promise<void>;
+	event(
+		name: string,
+		duration?: number,
+		meta?: Record<string, unknown>,
+	): Promise<void>;
 }
 
 // Configuration for Pirsch client provider
@@ -128,29 +136,33 @@ export class PirschClientProvider extends BaseAnalyticsProvider {
 		if (!this.isEnabled() || !this.initialized || !this.client || !isBrowser())
 			return;
 
-		// Pirsch's hit() method automatically tracks the current page
-		this.client.hit().catch((error) => {
+		// Build hit data with optional custom data
+		// Filter properties to scalar values (string, number, boolean) for tags
+		const tags =
+			properties &&
+			Object.keys(properties).length > 0
+				? (Object.fromEntries(
+						Object.entries(properties).filter(
+							([, v]) =>
+								typeof v === "string" ||
+								typeof v === "number" ||
+								typeof v === "boolean",
+						),
+					) as Record<string, string | number | boolean>)
+				: undefined;
+
+		const hitData = {
+			...(context?.page?.url && { url: context.page.url }),
+			...(context?.page?.title && { title: context.page.title }),
+			...(tags && { tags }),
+		};
+
+		// Track page view with tags if available, otherwise just basic hit
+		const hit = Object.keys(hitData).length > 0 ? hitData : undefined;
+
+		this.client.hit(hit).catch((error) => {
 			console.error("[Pirsch-Client] Failed to track page view:", error);
 		});
-
-		// Optionally track additional page view data as an event
-		if (properties && Object.keys(properties).length > 0) {
-			const meta = {
-				...properties,
-				...(context?.page && {
-					path: context.page.path,
-					title: context.page.title,
-					referrer: context.page.referrer,
-				}),
-			};
-
-			this.client.event("page_view", 0, meta).catch((error) => {
-				console.error(
-					"[Pirsch-Client] Failed to track page view event:",
-					error,
-				);
-			});
-		}
 
 		this.log("Tracked page view", { properties, context });
 	}

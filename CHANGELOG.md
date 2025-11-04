@@ -1,5 +1,15 @@
 # @stacksee/analytics
 
+## 0.9.5
+
+### Patch Changes
+
+- Fix Pirsch provider tracking issues
+
+  - **PirschServerProvider**: Extract real IP addresses and user-agents from proxy handler context instead of using hardcoded dummy values ("0.0.0.0" and "analytics-library"). Pirsch was rejecting hits with invalid IPs.
+  - **PirschServerProvider**: Build full URLs (e.g., "https://example.com/pricing") instead of sending just paths ("/pricing"), as required by Pirsch SDK.
+  - **PirschClientProvider**: Optimize page view tracking by passing properties as tags directly to `hit()` call instead of sending a separate event.
+
 ## 0.9.4
 
 ### Patch Changes
