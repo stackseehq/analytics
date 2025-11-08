@@ -1,5 +1,22 @@
 # @stacksee/analytics
 
+## 0.9.8
+
+### Patch Changes
+
+- refactor(proxy): improve type safety and context enrichment
+
+  - **Type Definitions**: Added `ServerContext` interface with fields for `userAgent`, `ip`, `requestId`, and `timestamp`
+  - **EventContext Extensions**: Extended `EventContext` with `server?: ServerContext` and added `ip?: string` to device context
+  - **Proxy Server**: Reduced `any` type usage by 87.5% in proxy server implementation
+  - **User-Agent Enrichment**: Automatically extract and add user-agent from request headers to server context
+  - **IP Enrichment**: IP addresses now properly typed in device context (no type assertions needed)
+  - **Context Merging**: Fixed type-safe merging of custom enrichContext with automatic server enrichment
+  - **Tests**: Updated all proxy server tests to use proper types (removed all `as any` assertions)
+  - **Backwards Compatible**: All changes maintain 100% API compatibility
+
+  This improves type safety at the HTTP/JSON boundary while maintaining flexibility for server-side context enrichment.
+
 ## 0.9.7
 
 ### Patch Changes

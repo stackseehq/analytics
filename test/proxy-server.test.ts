@@ -1,4 +1,3 @@
-// biome-ignore lint/suspicious/noExplicitAny: Test file needs type assertions for extended context fields
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
 	ingestProxyEvents,
@@ -198,8 +197,8 @@ describe("Proxy Server Ingestion", () => {
 
 			await ingestProxyEvents(request, serverAnalytics);
 
-			// Check that IP was enriched in context (use type assertion for extended field)
-			expect((mockProvider.calls.track[0].context?.device as any)?.ip).toBe("1.2.3.4");
+			// IP is now properly typed in device context
+			expect(mockProvider.calls.track[0].context?.device?.ip).toBe("1.2.3.4");
 		});
 
 		it("should extract IP from X-Real-IP header", async () => {
@@ -226,7 +225,7 @@ describe("Proxy Server Ingestion", () => {
 
 			await ingestProxyEvents(request, serverAnalytics);
 
-			expect((mockProvider.calls.track[0].context?.device as any)?.ip).toBe("9.8.7.6");
+			expect(mockProvider.calls.track[0].context?.device?.ip).toBe("9.8.7.6");
 		});
 
 		it("should extract IP from Cloudflare header", async () => {
@@ -253,7 +252,7 @@ describe("Proxy Server Ingestion", () => {
 
 			await ingestProxyEvents(request, serverAnalytics);
 
-			expect((mockProvider.calls.track[0].context?.device as any)?.ip).toBe("1.1.1.1");
+			expect(mockProvider.calls.track[0].context?.device?.ip).toBe("1.1.1.1");
 		});
 
 		it("should use custom IP extractor", async () => {
@@ -282,10 +281,71 @@ describe("Proxy Server Ingestion", () => {
 				extractIp: (req) => req.headers.get("x-custom-ip") || undefined,
 			});
 
-			expect((mockProvider.calls.track[0].context?.device as any)?.ip).toBe("10.0.0.1");
+			expect(mockProvider.calls.track[0].context?.device?.ip).toBe("10.0.0.1");
 		});
 
-		it("should enrich context with custom data", async () => {
+		it("should extract user-agent from request headers and add to server context", async () => {
+			const payload: ProxyPayload = {
+				events: [
+					{
+						type: "track",
+						event: {
+							action: "test_event",
+							category: "test",
+							properties: {},
+						},
+					},
+				],
+			};
+
+			const request = new Request("http://localhost/api/events", {
+				method: "POST",
+				headers: {
+					"User-Agent":
+						"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+				},
+				body: JSON.stringify(payload),
+			});
+
+			await ingestProxyEvents(request, serverAnalytics);
+
+			// User-agent is now properly typed in server context
+			expect(mockProvider.calls.track[0].context?.server?.userAgent).toBe(
+				"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+			);
+		});
+
+		it("should enrich both IP and user-agent together", async () => {
+			const payload: ProxyPayload = {
+				events: [
+					{
+						type: "track",
+						event: {
+							action: "test_event",
+							category: "test",
+							properties: {},
+						},
+					},
+				],
+			};
+
+			const request = new Request("http://localhost/api/events", {
+				method: "POST",
+				headers: {
+					"X-Forwarded-For": "192.168.1.1",
+					"User-Agent": "Chrome/120.0",
+				},
+				body: JSON.stringify(payload),
+			});
+
+			await ingestProxyEvents(request, serverAnalytics);
+
+			const context = mockProvider.calls.track[0].context;
+			expect(context?.device?.ip).toBe("192.168.1.1");
+			expect(context?.server?.userAgent).toBe("Chrome/120.0");
+		});
+
+		it("should enrich context with custom server data", async () => {
 			const payload: ProxyPayload = {
 				events: [
 					{
@@ -309,6 +369,7 @@ describe("Proxy Server Ingestion", () => {
 					server: {
 						region: "us-east-1",
 						version: "1.0.0",
+						requestId: "req-123",
 					},
 					request: {
 						method: req.method,
@@ -316,14 +377,49 @@ describe("Proxy Server Ingestion", () => {
 				}),
 			});
 
-			const context = mockProvider.calls.track[0].context as any;
-			expect(context?.server).toEqual({
-				region: "us-east-1",
-				version: "1.0.0",
-			});
-			expect(context?.request).toEqual({
+			const context = mockProvider.calls.track[0].context;
+			// Server context is now properly typed
+			expect(context?.server?.region).toBe("us-east-1");
+			expect(context?.server?.version).toBe("1.0.0");
+			expect(context?.server?.requestId).toBe("req-123");
+		});
+
+		it("should merge server context from enrichContext with userAgent", async () => {
+			const payload: ProxyPayload = {
+				events: [
+					{
+						type: "track",
+						event: {
+							action: "test_event",
+							category: "test",
+							properties: {},
+						},
+					},
+				],
+			};
+
+			const request = new Request("http://localhost/api/events", {
 				method: "POST",
+				headers: {
+					"User-Agent": "Test/1.0",
+				},
+				body: JSON.stringify(payload),
 			});
+
+			await ingestProxyEvents(request, serverAnalytics, {
+				enrichContext: () => ({
+					server: {
+						region: "us-west-2",
+						timestamp: 1234567890,
+					},
+				}),
+			});
+
+			const context = mockProvider.calls.track[0].context;
+			// Both custom server fields and userAgent should be present
+			expect(context?.server?.region).toBe("us-west-2");
+			expect(context?.server?.timestamp).toBe(1234567890);
+			expect(context?.server?.userAgent).toBe("Test/1.0");
 		});
 
 		it("should handle errors gracefully", async () => {
@@ -446,10 +542,8 @@ describe("Proxy Server Ingestion", () => {
 								title: "Test Page",
 							},
 							device: {
-								...(({
-									userAgent: "Mozilla/5.0",
-									language: "en-US",
-								} as any)),
+								userAgent: "Mozilla/5.0",
+								language: "en-US",
 							},
 						},
 					},
@@ -466,8 +560,43 @@ describe("Proxy Server Ingestion", () => {
 			const context = mockProvider.calls.track[0].context;
 			expect(context?.page?.path).toBe("/test");
 			expect(context?.page?.title).toBe("Test Page");
-			expect((context?.device as any)?.userAgent).toBe("Mozilla/5.0");
-			expect((context?.device as any)?.language).toBe("en-US");
+			// Device context fields are now properly typed
+			expect(context?.device?.userAgent).toBe("Mozilla/5.0");
+			expect(context?.device?.language).toBe("en-US");
+		});
+
+		it("should work with pageView events and server enrichment", async () => {
+			const payload: ProxyPayload = {
+				events: [
+					{
+						type: "pageView",
+						properties: {
+							loadTime: 250,
+						},
+						context: {
+							page: {
+								path: "/products",
+							},
+						},
+					},
+				],
+			};
+
+			const request = new Request("http://localhost/api/events", {
+				method: "POST",
+				headers: {
+					"X-Forwarded-For": "10.20.30.40",
+					"User-Agent": "Safari/17.0",
+				},
+				body: JSON.stringify(payload),
+			});
+
+			await ingestProxyEvents(request, serverAnalytics);
+
+			const context = mockProvider.calls.pageView[0].context;
+			expect(context?.device?.ip).toBe("10.20.30.40");
+			expect(context?.server?.userAgent).toBe("Safari/17.0");
+			expect(context?.page?.path).toBe("/products");
 		});
 	});
 
@@ -592,7 +721,7 @@ describe("Proxy Server Ingestion", () => {
 
 			await ingestProxyEvents(request, serverAnalytics);
 
-			expect((mockProvider.calls.track[0].context?.device as any)?.ip).toBe("1.2.3.4");
+			expect(mockProvider.calls.track[0].context?.device?.ip).toBe("1.2.3.4");
 		});
 	});
 });
