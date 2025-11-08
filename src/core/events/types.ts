@@ -29,6 +29,18 @@ export interface UserContext<
 	traits?: TTraits;
 }
 
+/**
+ * Server-side context enrichment
+ * Used by server analytics to add request-specific metadata
+ */
+export interface ServerContext {
+	userAgent?: string;
+	ip?: string;
+	requestId?: string;
+	timestamp?: number;
+	[key: string]: unknown;
+}
+
 export interface EventContext<
 	TTraits extends Record<string, unknown> = Record<string, unknown>,
 > {
@@ -49,6 +61,7 @@ export interface EventContext<
 		userAgent?: string;
 		language?: string;
 		timezone?: string;
+		ip?: string;
 		screen?: {
 			width?: number;
 			height?: number;
@@ -63,6 +76,7 @@ export interface EventContext<
 		medium?: string;
 		name?: string;
 	};
+	server?: ServerContext;
 }
 
 export interface AnalyticsProvider {

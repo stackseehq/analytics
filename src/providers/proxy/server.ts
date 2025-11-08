@@ -1,4 +1,4 @@
-// biome-ignore lint/suspicious/noExplicitAny: Proxy provider needs type assertions to forward generic events
+import type { EventContext } from "@/core/events/types.js";
 import type { ServerAnalytics } from "@/server.js";
 import type { ProxyPayload } from "./types.js";
 
@@ -66,6 +66,9 @@ export async function ingestProxyEvents<
 			? config.extractIp(request)
 			: extractIpFromRequest(request);
 
+		// Extract user-agent from request headers
+		const userAgent = request.headers.get("user-agent");
+
 		const serverContext = config?.enrichContext
 			? config.enrichContext(request)
 			: {};
@@ -79,22 +82,31 @@ export async function ingestProxyEvents<
 						const enrichedContext = {
 							...event.context,
 							...serverContext,
+							server: {
+								...event.context?.server,
+								...(typeof serverContext?.server === "object" &&
+								serverContext.server !== null
+									? serverContext.server
+									: {}),
+								...(userAgent ? { userAgent } : {}),
+							},
 							device: {
 								...event.context?.device,
-								// Add IP (using type assertion for extended fields)
-								// biome-ignore lint/suspicious/noExplicitAny: IP field not in base device type
-								...(ip ? ({ ip } as any) : {}),
+								...(ip ? { ip } : {}),
 							},
-						};
+						} as EventContext<TUserTraits>;
 
 						// Convert BaseEvent back to track() parameters
-						// biome-ignore lint/suspicious/noExplicitAny: Generic event forwarding requires type assertion
-						await analytics.track(event.event.action, event.event.properties as any, {
-							userId: event.event.userId,
-							sessionId: event.event.sessionId,
-							// biome-ignore lint/suspicious/noExplicitAny: Generic context forwarding requires type assertion
-							context: enrichedContext as any,
-						});
+						await analytics.track(
+							event.event.action,
+							// biome-ignore lint/suspicious/noExplicitAny: Properties from JSON cannot be type-checked against TEventMap at compile time
+							event.event.properties as any,
+							{
+								userId: event.event.userId,
+								sessionId: event.event.sessionId,
+								context: enrichedContext,
+							},
+						);
 						break;
 					}
 
@@ -108,16 +120,23 @@ export async function ingestProxyEvents<
 						const enrichedContext = {
 							...event.context,
 							...serverContext,
+							server: {
+								...event.context?.server,
+								...(typeof serverContext?.server === "object" &&
+								serverContext.server !== null
+									? serverContext.server
+									: {}),
+								...(userAgent ? { userAgent } : {}),
+							},
 							device: {
 								...event.context?.device,
-							// biome-ignore lint/suspicious/noExplicitAny: IP field not in base device type
-								// Add IP (using type assertion for extended fields)
-								...(ip ? ({ ip } as any) : {}),
+								...(ip ? { ip } : {}),
 							},
-						};
-					// biome-ignore lint/suspicious/noExplicitAny: Generic context forwarding requires type assertion
+						} as EventContext<TUserTraits>;
 
-						analytics.pageView(event.properties, enrichedContext as any);
+						analytics.pageView(event.properties, {
+							context: enrichedContext,
+						});
 						break;
 					}
 
