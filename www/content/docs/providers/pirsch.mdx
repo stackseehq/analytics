@@ -31,6 +31,10 @@ await analytics.initialize();
 
 ## Server-Side Usage
 
+### Option 1: Using Access Key (Recommended)
+
+Access keys are simpler and more efficient as they don't require OAuth token refresh:
+
 ```typescript
 import { createServerAnalytics } from '@stacksee/analytics/server';
 import { PirschServerProvider } from '@stacksee/analytics/providers/server';
@@ -39,12 +43,38 @@ const serverAnalytics = createServerAnalytics({
   providers: [
     new PirschServerProvider({
       hostname: 'example.com',
-      clientSecret: process.env.PIRSCH_ACCESS_KEY!, // or client secret
+      clientSecret: process.env.PIRSCH_ACCESS_KEY!, // Starts with 'pa_'
       protocol: 'https'
     })
   ]
 });
 ```
+
+### Option 2: Using OAuth Client Credentials
+
+If using OAuth authentication, you must provide both `clientId` and `clientSecret`:
+
+```typescript
+const serverAnalytics = createServerAnalytics({
+  providers: [
+    new PirschServerProvider({
+      hostname: 'example.com',
+      clientId: process.env.PIRSCH_CLIENT_ID!,
+      clientSecret: process.env.PIRSCH_CLIENT_SECRET!,
+      protocol: 'https'
+    })
+  ]
+});
+```
+
+### Important: Context Requirements
+
+The Pirsch server provider requires valid request context (IP address and User-Agent) to function properly. If you're tracking server-side events without request context, those events will be automatically skipped.
+
+For proper tracking:
+- Use the Proxy pattern to capture client requests
+- Ensure your proxy handler enriches events with IP and User-Agent
+- See [Proxy Provider documentation](/docs/providers/proxy) for setup instructions
 
 ## Privacy Features
 

@@ -69,6 +69,15 @@ export class PirschServerProvider extends BaseAnalyticsProvider {
 			throw new Error("Pirsch requires a clientSecret (or access key)");
 		}
 
+		// Check if using access key (starts with "pa_") or OAuth (requires clientId)
+		const isAccessKey = this.config.clientSecret.startsWith("pa_");
+		if (!isAccessKey && !this.config.clientId) {
+			throw new Error(
+				"Pirsch requires a clientId when using OAuth authentication (clientSecret doesn't start with 'pa_'). " +
+				"Either provide a clientId or use an access key (starts with 'pa_') as clientSecret.",
+			);
+		}
+
 		try {
 			// Dynamically import the Pirsch SDK
 			const { Pirsch } = await import("pirsch-sdk");
@@ -79,6 +88,7 @@ export class PirschServerProvider extends BaseAnalyticsProvider {
 			this.initialized = true;
 			this.log("Initialized successfully", {
 				hostname: this.config.hostname,
+				authMode: isAccessKey ? "access-key" : "oauth",
 			});
 		} catch (error) {
 			console.error(
@@ -127,9 +137,20 @@ export class PirschServerProvider extends BaseAnalyticsProvider {
 		// Extract IP and user-agent from enriched context (set by proxy handler)
 		// biome-ignore lint/suspicious/noExplicitAny: Extended context fields from proxy handler
 		const extendedContext = context as any;
-		const ip = extendedContext?.device?.ip || "0.0.0.0";
+		const ip = extendedContext?.device?.ip || extendedContext?.server?.ip;
 		const userAgent =
-			extendedContext?.server?.userAgent || extendedContext?.device?.userAgent || "unknown";
+			extendedContext?.server?.userAgent || extendedContext?.device?.userAgent;
+
+		// Skip tracking if we don't have valid IP or user-agent
+		// Pirsch requires real browser data, not dummy values
+		if (!ip || !userAgent) {
+			this.log("Skipping event - missing required IP or user-agent from context", {
+				hasIp: !!ip,
+				hasUserAgent: !!userAgent,
+				event: event.action,
+			});
+			return;
+		}
 
 		// Build full URL (Pirsch requires full URLs, not just paths)
 		const url =
@@ -193,9 +214,19 @@ export class PirschServerProvider extends BaseAnalyticsProvider {
 		// Extract IP and user-agent from enriched context (set by proxy handler)
 		// biome-ignore lint/suspicious/noExplicitAny: Extended context fields from proxy handler
 		const extendedContext = context as any;
-		const ip = extendedContext?.device?.ip || "0.0.0.0";
+		const ip = extendedContext?.device?.ip || extendedContext?.server?.ip;
 		const userAgent =
-			extendedContext?.server?.userAgent || extendedContext?.device?.userAgent || "unknown";
+			extendedContext?.server?.userAgent || extendedContext?.device?.userAgent;
+
+		// Skip tracking if we don't have valid IP or user-agent
+		// Pirsch requires real browser data, not dummy values
+		if (!ip || !userAgent) {
+			this.log("Skipping pageView - missing required IP or user-agent from context", {
+				hasIp: !!ip,
+				hasUserAgent: !!userAgent,
+			});
+			return;
+		}
 
 		// Build full URL (Pirsch requires full URLs, not just paths)
 		const url =

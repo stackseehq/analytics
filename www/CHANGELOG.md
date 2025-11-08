@@ -1,5 +1,12 @@
 # @stacksee/docs
 
+## 0.0.4
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @stacksee/analytics@0.9.7
+
 ## 0.0.3
 
 ### Patch Changes

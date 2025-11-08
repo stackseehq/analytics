@@ -1,5 +1,17 @@
 # @stacksee/analytics
 
+## 0.9.7
+
+### Patch Changes
+
+- fix(pirsch): resolve network errors from invalid context data
+
+  - Add validation for OAuth authentication requiring both clientId and clientSecret
+  - Skip tracking events when IP or User-Agent is missing from context instead of using dummy values
+  - Pirsch API rejects invalid/dummy data (like "0.0.0.0" or "unknown"), causing Network Errors
+  - Add clear logging when events are skipped due to missing context
+  - Update documentation with authentication options and context requirements
+
 ## 0.9.6
 
 ### Patch Changes
