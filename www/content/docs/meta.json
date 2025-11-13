@@ -1,18 +1,18 @@
 {
-  "title": "Documentation",
-  "pages": [
-    "---Getting Started---",
-    "index",
-    "installation",
-    "your-first-event",
-    "identifying-users",
-    "---Core Concepts---",
-    "core-concepts",
-    "---Providers---",
-    "providers",
-    "---Framework Guides---",
-    "guides",
-    "---API Reference---",
-    "api"
-  ]
+	"title": "Documentation",
+	"pages": [
+		"---Getting Started---",
+		"index",
+		"installation",
+		"your-first-event",
+		"identifying-users",
+		"---Core Concepts---",
+		"core-concepts",
+		"---Providers---",
+		"providers",
+		"---Framework Guides---",
+		"guides",
+		"---API Reference---",
+		"api"
+	]
 }

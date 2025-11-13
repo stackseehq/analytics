@@ -65,10 +65,7 @@ export class BentoServerProvider extends BaseAnalyticsProvider {
 		if (this.initialized) return;
 
 		// Validate config has required fields
-		if (
-			!this.config.siteUuid ||
-			typeof this.config.siteUuid !== "string"
-		) {
+		if (!this.config.siteUuid || typeof this.config.siteUuid !== "string") {
 			throw new Error("Bento requires a siteUuid");
 		}
 		if (
@@ -113,7 +110,10 @@ export class BentoServerProvider extends BaseAnalyticsProvider {
 
 		// Validate that we have a proper email format
 		if (!email || !email.includes("@")) {
-			this.log("Skipping identify - invalid or missing email", { userId, traits });
+			this.log("Skipping identify - invalid or missing email", {
+				userId,
+				traits,
+			});
 			return;
 		}
 
@@ -121,16 +121,14 @@ export class BentoServerProvider extends BaseAnalyticsProvider {
 
 		// Add subscriber with traits using the V1 API
 		const fields = traits ? { ...traits } : {};
-		delete fields.email; // Remove email from fields since it's passed separately
+		fields.email = undefined; // Remove email from fields since it's passed separately
 
-		this.client.V1
-			.addSubscriber({
-				email,
-				fields,
-			})
-			.catch((error) => {
-				console.error("[Bento-Server] Failed to identify user:", error);
-			});
+		this.client.V1.addSubscriber({
+			email,
+			fields,
+		}).catch((error) => {
+			console.error("[Bento-Server] Failed to identify user:", error);
+		});
 
 		this.log("Identified user", { userId, email, traits });
 	}
@@ -150,10 +148,10 @@ export class BentoServerProvider extends BaseAnalyticsProvider {
 		if (!email || !email.includes("@")) {
 			console.warn(
 				"[Bento-Server] Skipping event - Bento requires an email address. " +
-				"Anonymous events are not currently supported by the Bento Node SDK. " +
-				"For now, use the Bento client provider for anonymous tracking. " +
-				"If you're using a proxy, use the hybrid pattern as described in the docs. " +
-				"For identified users, call identify() with a valid email before tracking events."
+					"Anonymous events are not currently supported by the Bento Node SDK. " +
+					"For now, use the Bento client provider for anonymous tracking. " +
+					"If you're using a proxy, use the hybrid pattern as described in the docs. " +
+					"For identified users, call identify() with a valid email before tracking events.",
 			);
 			return;
 		}
@@ -208,10 +206,10 @@ export class BentoServerProvider extends BaseAnalyticsProvider {
 		if (!email || !email.includes("@")) {
 			console.warn(
 				"[Bento-Server] Skipping pageView - Bento requires an email address. " +
-				"Anonymous events are not currently supported by the Bento Node SDK. " +
-				"For now, use the Bento client provider for anonymous tracking. " +
-				"If you're using a proxy, use the hybrid pattern as described in the docs. " +
-				"For identified users, call identify() with a valid email before tracking events."
+					"Anonymous events are not currently supported by the Bento Node SDK. " +
+					"For now, use the Bento client provider for anonymous tracking. " +
+					"If you're using a proxy, use the hybrid pattern as described in the docs. " +
+					"For identified users, call identify() with a valid email before tracking events.",
 			);
 			return;
 		}
@@ -236,16 +234,14 @@ export class BentoServerProvider extends BaseAnalyticsProvider {
 
 		const fields = context?.user?.traits || {};
 
-		this.client.V1
-			.track({
-				email,
-				type: "$view",
-				details,
-				fields,
-			})
-			.catch((error) => {
-				console.error("[Bento-Server] Failed to track page view:", error);
-			});
+		this.client.V1.track({
+			email,
+			type: "$view",
+			details,
+			fields,
+		}).catch((error) => {
+			console.error("[Bento-Server] Failed to track page view:", error);
+		});
 
 		this.log("Tracked page view", { properties, context });
 	}

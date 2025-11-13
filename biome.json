@@ -7,7 +7,7 @@
 	},
 	"files": {
 		"ignoreUnknown": false,
-		"ignore": ["dist/*", "node_modules/*", "coverage/*"]
+		"ignore": ["dist/*", "node_modules/*", "coverage/*", "www/.next/*", ".next/*"]
 	},
 	"formatter": {
 		"enabled": true,

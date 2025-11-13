@@ -1,7 +1,4 @@
 {
-  "title": "Framework Guides",
-  "pages": [
-    "nextjs",
-    "sveltekit"
-  ]
+	"title": "Framework Guides",
+	"pages": ["nextjs", "sveltekit"]
 }

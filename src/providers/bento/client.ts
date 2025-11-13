@@ -136,8 +136,7 @@ export class BentoClientProvider extends BaseAnalyticsProvider {
 		if (!this.isEnabled() || !this.initialized || !this.bento) return;
 
 		// Bento's identify method expects an email
-		const email =
-			(traits?.email as string | undefined) || userId;
+		const email = (traits?.email as string | undefined) || userId;
 
 		this.bento.identify(email);
 
@@ -145,7 +144,7 @@ export class BentoClientProvider extends BaseAnalyticsProvider {
 		if (traits) {
 			const fieldsToUpdate = { ...traits };
 			// Remove email from fields since it's already set via identify
-			delete fieldsToUpdate.email;
+			fieldsToUpdate.email = undefined;
 
 			if (Object.keys(fieldsToUpdate).length > 0) {
 				this.bento.updateFields(fieldsToUpdate);
@@ -253,7 +252,9 @@ export class BentoClientProvider extends BaseAnalyticsProvider {
 
 		// Bento doesn't have a built-in reset method, so we'll clear the identify
 		// by identifying with an empty/anonymous user
-		this.log("Reset user session - Note: Bento doesn't have a native reset method");
+		this.log(
+			"Reset user session - Note: Bento doesn't have a native reset method",
+		);
 	}
 
 	// ============================================================================

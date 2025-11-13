@@ -139,8 +139,7 @@ export class PirschClientProvider extends BaseAnalyticsProvider {
 		// Build hit data with optional custom data
 		// Filter properties to scalar values (string, number, boolean) for tags
 		const tags =
-			properties &&
-			Object.keys(properties).length > 0
+			properties && Object.keys(properties).length > 0
 				? (Object.fromEntries(
 						Object.entries(properties).filter(
 							([, v]) =>

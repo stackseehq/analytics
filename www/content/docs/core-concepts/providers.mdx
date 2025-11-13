@@ -212,6 +212,167 @@ await serverAnalytics.shutdown();
 
 Without `shutdown()`, events may be lost when the serverless function terminates.
 
+## Provider Routing
+
+Sometimes you want to use a provider for specific methods only. For example, you might want Bento for email marketing (identify, track) but not for page views, or use different providers for different types of events.
+
+### Selective Method Routing
+
+**Include specific methods:**
+
+```typescript
+const analytics = createClientAnalytics({
+  providers: [
+    // Use Bento only for identify and track
+    {
+      provider: new BentoClientProvider({ siteUuid: 'xxx' }),
+      methods: ['identify', 'track']
+    }
+  ]
+});
+
+// ✅ Called on Bento
+analytics.identify('user-123');
+analytics.track('purchase', { amount: 99 });
+
+// ❌ NOT called on Bento
+analytics.pageView();
+analytics.pageLeave();
+```
+
+**Exclude specific methods:**
+
+```typescript
+const analytics = createClientAnalytics({
+  providers: [
+    // Use Bento for everything except pageView
+    {
+      provider: new BentoClientProvider({ siteUuid: 'xxx' }),
+      exclude: ['pageView']
+    }
+  ]
+});
+
+// ✅ Called on Bento
+analytics.identify('user-123');
+analytics.track('purchase', { amount: 99 });
+analytics.pageLeave();
+
+// ❌ NOT called on Bento
+analytics.pageView();
+```
+
+### Mixed Provider Configuration
+
+Combine simple and routed providers for maximum flexibility:
+
+```typescript
+const analytics = createClientAnalytics({
+  providers: [
+    // PostHog gets all events
+    new PostHogClientProvider({ token: 'xxx' }),
+
+    // Google Analytics only gets page views
+    {
+      provider: new GoogleAnalyticsProvider({ measurementId: 'xxx' }),
+      methods: ['pageView']
+    },
+
+    // Bento gets everything except page views
+    {
+      provider: new BentoClientProvider({ siteUuid: 'xxx' }),
+      exclude: ['pageView']
+    },
+
+    // Custom CRM provider only gets identify calls
+    {
+      provider: new CustomCRMProvider({ apiKey: 'xxx' }),
+      methods: ['identify']
+    }
+  ]
+});
+```
+
+### Available Methods
+
+You can route these methods:
+
+- `initialize` - Always called, cannot be excluded
+- `identify` - User identification
+- `track` - Custom event tracking
+- `pageView` - Page view events
+- `pageLeave` - Page leave events
+- `reset` - Clear user session
+
+**Note:** `initialize()` is always called on all providers regardless of routing configuration, as providers must be initialized before they can function.
+
+### Use Cases
+
+**Reduce noise in specific providers:**
+
+```typescript
+// Bento is for email automation - don't clutter it with page views
+{
+  provider: new BentoClientProvider({ siteUuid: 'xxx' }),
+  exclude: ['pageView', 'pageLeave']
+}
+```
+
+**Specialized provider roles:**
+
+```typescript
+const analytics = createClientAnalytics({
+  providers: [
+    // Full-featured analytics
+    new PostHogClientProvider({ token: 'xxx' }),
+
+    // CRM only needs user data
+    {
+      provider: new HubSpotProvider({ apiKey: 'xxx' }),
+      methods: ['identify']
+    },
+
+    // Email marketing needs identity and conversion events
+    {
+      provider: new BentoClientProvider({ siteUuid: 'xxx' }),
+      methods: ['identify', 'track']
+    }
+  ]
+});
+```
+
+**Custom provider implementation:**
+
+When building custom providers, routing lets you implement only what you need without making noop methods:
+
+```typescript
+// Instead of implementing all methods with empty bodies...
+class CustomProvider extends BaseAnalyticsProvider {
+  identify(userId: string) { /* actually implemented */ }
+  track(event: BaseEvent) { /* actually implemented */ }
+  pageView() { /* empty - not supported */ }
+  pageLeave() { /* empty - not supported */ }
+  reset() { /* empty - not supported */ }
+}
+
+// ...just implement what you need and use routing
+class CustomProvider extends BaseAnalyticsProvider {
+  identify(userId: string) { /* implemented */ }
+  track(event: BaseEvent) { /* implemented */ }
+
+  // Don't need to implement these
+  pageView() {}
+  pageLeave() {}
+  reset() {}
+}
+
+// Then configure routing
+{
+  provider: new CustomProvider(),
+  methods: ['identify', 'track']
+}
+```
+
 ## Using Multiple Providers
 
 ### Common Combinations

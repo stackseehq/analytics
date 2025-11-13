@@ -1,4 +1,3 @@
-// biome-ignore lint/suspicious/noExplicitAny: Proxy provider needs type assertions to forward generic events
 import type { BaseEvent, EventContext } from "@/core/events/types.js";
 import { BaseAnalyticsProvider } from "@/providers/base.provider.js";
 import type {
@@ -245,7 +244,7 @@ export class ProxyProvider extends BaseAnalyticsProvider {
 				...context?.page,
 				// Additional fields for proxy (cast to any to bypass strict typing)
 				// biome-ignore lint/suspicious/noExplicitAny: Extended page context fields not in base type
-				...(({ url: window.location.href } as any)),
+				...({ url: window.location.href } as any),
 			},
 			user: {
 				...context?.user,
@@ -266,7 +265,7 @@ export class ProxyProvider extends BaseAnalyticsProvider {
 						width: window.innerWidth,
 						height: window.innerHeight,
 					},
-				} as any)),
+				}) as any),
 			},
 		};
 	}

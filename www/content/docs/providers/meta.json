@@ -1,11 +1,4 @@
 {
-  "title": "Providers",
-  "pages": [
-    "index",
-    "posthog",
-    "bento",
-    "pirsch",
-    "proxy",
-    "custom"
-  ]
+	"title": "Providers",
+	"pages": ["index", "posthog", "bento", "pirsch", "proxy", "custom"]
 }

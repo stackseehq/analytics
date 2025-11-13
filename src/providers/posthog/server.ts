@@ -8,7 +8,12 @@ export class PostHogServerProvider extends BaseAnalyticsProvider {
 	private initialized = false;
 	private config: { apiKey: string } & PostHogOptions;
 
-	constructor(config: { apiKey: string } & PostHogOptions & { debug?: boolean; enabled?: boolean }) {
+	constructor(
+		config: { apiKey: string } & PostHogOptions & {
+				debug?: boolean;
+				enabled?: boolean;
+			},
+	) {
 		super({ debug: config.debug, enabled: config.enabled });
 		this.config = config;
 	}
@@ -24,7 +29,7 @@ export class PostHogServerProvider extends BaseAnalyticsProvider {
 
 		try {
 			const { apiKey, ...posthogOptions } = this.config;
-			
+
 			this.client = new PostHog(apiKey, {
 				host: "https://app.posthog.com",
 				flushAt: 20,

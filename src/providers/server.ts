@@ -7,7 +7,10 @@ export type { PostHogOptions } from "posthog-node";
 
 // Bento server provider
 export { BentoServerProvider } from "./bento/server.js";
-export type { BentoServerConfig, BentoAnalyticsOptions } from "./bento/server.js";
+export type {
+	BentoServerConfig,
+	BentoAnalyticsOptions,
+} from "./bento/server.js";
 
 // Pirsch server provider
 export { PirschServerProvider } from "./pirsch/server.js";

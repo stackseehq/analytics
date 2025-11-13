@@ -1,89 +1,85 @@
 {
-  "name": "@stacksee/analytics",
-  "version": "0.9.8",
-  "description": "A highly typed, provider-agnostic analytics library for TypeScript applications",
-  "type": "module",
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
-    },
-    "./client": {
-      "types": "./dist/client.d.ts",
-      "import": "./dist/client.js"
-    },
-    "./server": {
-      "types": "./dist/server.d.ts",
-      "import": "./dist/server.js"
-    },
-    "./providers/client": {
-      "types": "./dist/providers/client.d.ts",
-      "import": "./dist/providers/client.js"
-    },
-    "./providers/server": {
-      "types": "./dist/providers/server.d.ts",
-      "import": "./dist/providers/server.js"
-    }
-  },
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
-  "files": [
-    "dist",
-    "README.md",
-    "LICENSE"
-  ],
-  "scripts": {
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "build": "vite build",
-    "dev": "pnpm --filter @stacksee/docs dev",
-    "build:docs": "pnpm --filter @stacksee/docs build",
-    "deploy": "npm publish",
-    "typecheck": "tsc --noEmit",
-    "ci:publish": "pnpm build && changeset publish",
-    "lint": "biome lint .",
-    "format": "biome format --write .",
-    "biome": "biome"
-  },
-  "keywords": [
-    "analytics",
-    "typescript",
-    "posthog",
-    "bento",
-    "pirsch",
-    "tracking",
-    "events",
-    "type-safe"
-  ],
-  "author": "Chris Jayden <https://github.com/multiplehats>",
-  "license": "ISC",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/stackseehq/analytics.git"
-  },
-  "devDependencies": {
-    "@biomejs/biome": "1.9.4",
-    "@changesets/cli": "^2.29.4",
-    "@svitejs/changesets-changelog-github-compact": "^1.2.0",
-    "@types/node": "^20.14.11",
-    "@vitest/coverage-v8": "3.1.4",
-    "globals": "^15.8.0",
-    "jsdom": "^26.1.0",
-    "prettier": "^3.3.3",
-    "typescript": "~5.5.3",
-    "vite": "^6.3.5",
-    "vite-plugin-dts": "^4.5.4",
-    "vitest": "^2.0.3"
-  },
-  "optionalDependencies": {
-    "@bentonow/bento-node-sdk": "^0.2.1",
-    "pirsch-sdk": "^2.9.1",
-    "posthog-js": "^1.268.2",
-    "posthog-node": "^5.9.0"
-  },
-  "engines": {
-    "pnpm": ">=9.0.0",
-    "node": ">=20"
-  },
-  "packageManager": "pnpm@9.14.4"
+	"name": "@stacksee/analytics",
+	"version": "0.9.8",
+	"description": "A highly typed, provider-agnostic analytics library for TypeScript applications",
+	"type": "module",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js"
+		},
+		"./client": {
+			"types": "./dist/client.d.ts",
+			"import": "./dist/client.js"
+		},
+		"./server": {
+			"types": "./dist/server.d.ts",
+			"import": "./dist/server.js"
+		},
+		"./providers/client": {
+			"types": "./dist/providers/client.d.ts",
+			"import": "./dist/providers/client.js"
+		},
+		"./providers/server": {
+			"types": "./dist/providers/server.d.ts",
+			"import": "./dist/providers/server.js"
+		}
+	},
+	"main": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"files": ["dist", "README.md", "LICENSE"],
+	"scripts": {
+		"test": "vitest run",
+		"test:watch": "vitest",
+		"build": "vite build",
+		"dev": "pnpm --filter @stacksee/docs dev",
+		"build:docs": "pnpm --filter @stacksee/docs build",
+		"deploy": "npm publish",
+		"typecheck": "tsc --noEmit",
+		"ci:publish": "pnpm build && changeset publish",
+		"lint": "biome lint .",
+		"format": "biome format --write .",
+		"biome": "biome"
+	},
+	"keywords": [
+		"analytics",
+		"typescript",
+		"posthog",
+		"bento",
+		"pirsch",
+		"tracking",
+		"events",
+		"type-safe"
+	],
+	"author": "Chris Jayden <https://github.com/multiplehats>",
+	"license": "ISC",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/stackseehq/analytics.git"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "1.9.4",
+		"@changesets/cli": "^2.29.4",
+		"@svitejs/changesets-changelog-github-compact": "^1.2.0",
+		"@types/node": "^20.14.11",
+		"@vitest/coverage-v8": "3.1.4",
+		"globals": "^15.8.0",
+		"jsdom": "^26.1.0",
+		"prettier": "^3.3.3",
+		"typescript": "~5.5.3",
+		"vite": "^6.3.5",
+		"vite-plugin-dts": "^4.5.4",
+		"vitest": "^2.0.3"
+	},
+	"optionalDependencies": {
+		"@bentonow/bento-node-sdk": "^0.2.1",
+		"pirsch-sdk": "^2.9.1",
+		"posthog-js": "^1.268.2",
+		"posthog-node": "^5.9.0"
+	},
+	"engines": {
+		"pnpm": ">=9.0.0",
+		"node": ">=20"
+	},
+	"packageManager": "pnpm@9.14.4"
 }

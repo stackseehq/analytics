@@ -50,13 +50,44 @@ const serverAnalytics = createServerAnalytics({
 });
 ```
 
+## Selective Method Routing
+
+If you want to use Bento only for specific methods (e.g., skip page views), you can use provider routing:
+
+```typescript
+import { createClientAnalytics } from '@stacksee/analytics/client';
+import { BentoClientProvider } from '@stacksee/analytics/providers/client';
+import { PostHogClientProvider } from '@stacksee/analytics/providers/client';
+
+const analytics = createClientAnalytics({
+  providers: [
+    // Use PostHog for all tracking
+    new PostHogClientProvider({
+      apiKey: 'your-posthog-key',
+      host: 'https://app.posthog.com'
+    }),
+    // Use Bento only for custom events and identification (skip pageView)
+    {
+      provider: new BentoClientProvider({
+        siteUuid: 'your-bento-site-uuid'
+      }),
+      exclude: ['pageView']
+    }
+  ]
+});
+```
+
+This prevents noise in your Bento account from page view events while still using Bento for user identification and custom events.
+
 ## Important Notes
 
 - Bento requires an email address for tracking events
 - Events may take 1-3 minutes to appear (batch API)
 - User context is automatically extracted from `identify()` calls
+- Use provider routing to control which methods are called on Bento
 
 ## Resources
 
 - [Bento Documentation](https://docs.bentonow.com/)
 - [Bento SDK on GitHub](https://github.com/bentonow/bento-node-sdk)
+- [Provider Routing Guide](/docs/core-concepts/providers#provider-routing)

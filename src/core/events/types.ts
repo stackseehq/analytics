@@ -98,8 +98,66 @@ export interface AnalyticsProvider {
 	reset(): Promise<void> | void;
 }
 
+/**
+ * Provider methods that can be selectively enabled/disabled through routing
+ */
+export type ProviderMethod =
+	| "initialize"
+	| "identify"
+	| "track"
+	| "pageView"
+	| "pageLeave"
+	| "reset";
+
+/**
+ * Configuration for selective provider method routing.
+ * Allows you to control which methods are called on a specific provider.
+ *
+ * @example
+ * ```typescript
+ * // Only call track and identify, skip pageView
+ * {
+ *   provider: new BentoClientProvider({...}),
+ *   methods: ['track', 'identify']
+ * }
+ * ```
+ *
+ * @example
+ * ```typescript
+ * // Call all methods except pageView
+ * {
+ *   provider: new GoogleAnalyticsProvider({...}),
+ *   exclude: ['pageView']
+ * }
+ * ```
+ */
+export interface ProviderConfig {
+	/**
+	 * The analytics provider instance
+	 */
+	provider: AnalyticsProvider;
+	/**
+	 * Only call these methods on this provider.
+	 * If specified, all other methods will be skipped.
+	 * Mutually exclusive with `exclude`.
+	 */
+	methods?: ProviderMethod[];
+	/**
+	 * Skip these methods on this provider.
+	 * All other methods will be called normally.
+	 * Mutually exclusive with `methods`.
+	 */
+	exclude?: ProviderMethod[];
+}
+
+/**
+ * Provider configuration - supports both simple provider instances
+ * and advanced routing configurations
+ */
+export type ProviderConfigOrProvider = AnalyticsProvider | ProviderConfig;
+
 export interface AnalyticsConfig {
-	providers: AnalyticsProvider[];
+	providers: ProviderConfigOrProvider[];
 	debug?: boolean;
 	enabled?: boolean;
 	defaultContext?: Partial<EventContext>;

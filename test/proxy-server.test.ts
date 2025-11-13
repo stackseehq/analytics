@@ -500,7 +500,9 @@ describe("Proxy Server Ingestion", () => {
 		});
 
 		it("should handle unknown event types", async () => {
-			const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => {});
+			const consoleWarn = vi
+				.spyOn(console, "warn")
+				.mockImplementation(() => {});
 
 			const payload = {
 				events: [

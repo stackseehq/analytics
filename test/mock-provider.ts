@@ -52,7 +52,10 @@ export class MockAnalyticsProvider extends BaseAnalyticsProvider {
 		this.log("Tracked page view", { properties, context });
 	}
 
-	pageLeave(properties?: Record<string, unknown>, context?: EventContext): void {
+	pageLeave(
+		properties?: Record<string, unknown>,
+		context?: EventContext,
+	): void {
 		if (!this.isEnabled() || !this.initialized) return;
 		this.calls.pageLeave.push({ properties, context });
 		this.log("Tracked page leave", { properties, context });

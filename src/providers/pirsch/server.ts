@@ -74,7 +74,7 @@ export class PirschServerProvider extends BaseAnalyticsProvider {
 		if (!isAccessKey && !this.config.clientId) {
 			throw new Error(
 				"Pirsch requires a clientId when using OAuth authentication (clientSecret doesn't start with 'pa_'). " +
-				"Either provide a clientId or use an access key (starts with 'pa_') as clientSecret.",
+					"Either provide a clientId or use an access key (starts with 'pa_') as clientSecret.",
 			);
 		}
 
@@ -144,20 +144,21 @@ export class PirschServerProvider extends BaseAnalyticsProvider {
 		// Skip tracking if we don't have valid IP or user-agent
 		// Pirsch requires real browser data, not dummy values
 		if (!ip || !userAgent) {
-			this.log("Skipping event - missing required IP or user-agent from context", {
-				hasIp: !!ip,
-				hasUserAgent: !!userAgent,
-				event: event.action,
-			});
+			this.log(
+				"Skipping event - missing required IP or user-agent from context",
+				{
+					hasIp: !!ip,
+					hasUserAgent: !!userAgent,
+					event: event.action,
+				},
+			);
 			return;
 		}
 
 		// Build full URL (Pirsch requires full URLs, not just paths)
 		const url =
 			context?.page?.url ||
-			(context?.page?.protocol &&
-			context?.page?.host &&
-			context?.page?.path
+			(context?.page?.protocol && context?.page?.host && context?.page?.path
 				? `${context.page.protocol}://${context.page.host}${context.page.path}`
 				: context?.page?.path
 					? `https://${this.config.hostname}${context.page.path}`
@@ -170,11 +171,24 @@ export class PirschServerProvider extends BaseAnalyticsProvider {
 			user_agent: userAgent,
 			...(context?.page?.title && { title: context.page.title }),
 			...(context?.page?.referrer && { referrer: context.page.referrer }),
-			...(context?.device?.screen?.width && { screen_width: context.device.screen.width }),
-			...(context?.device?.screen?.height && { screen_height: context.device.screen.height }),
-			...(context?.device?.viewport?.width && { sec_ch_viewport_width: String(context.device.viewport.width) }),
-			...(context?.device?.language && { accept_language: context.device.language }),
-			...(context?.device?.type && { sec_ch_ua_mobile: context.device.type === 'mobile' || context.device.type === 'tablet' ? '?1' : '?0' }),
+			...(context?.device?.screen?.width && {
+				screen_width: context.device.screen.width,
+			}),
+			...(context?.device?.screen?.height && {
+				screen_height: context.device.screen.height,
+			}),
+			...(context?.device?.viewport?.width && {
+				sec_ch_viewport_width: String(context.device.viewport.width),
+			}),
+			...(context?.device?.language && {
+				accept_language: context.device.language,
+			}),
+			...(context?.device?.type && {
+				sec_ch_ua_mobile:
+					context.device.type === "mobile" || context.device.type === "tablet"
+						? "?1"
+						: "?0",
+			}),
 			...(context?.device?.os && { sec_ch_ua_platform: context.device.os }),
 		};
 
@@ -221,19 +235,20 @@ export class PirschServerProvider extends BaseAnalyticsProvider {
 		// Skip tracking if we don't have valid IP or user-agent
 		// Pirsch requires real browser data, not dummy values
 		if (!ip || !userAgent) {
-			this.log("Skipping pageView - missing required IP or user-agent from context", {
-				hasIp: !!ip,
-				hasUserAgent: !!userAgent,
-			});
+			this.log(
+				"Skipping pageView - missing required IP or user-agent from context",
+				{
+					hasIp: !!ip,
+					hasUserAgent: !!userAgent,
+				},
+			);
 			return;
 		}
 
 		// Build full URL (Pirsch requires full URLs, not just paths)
 		const url =
 			context?.page?.url ||
-			(context?.page?.protocol &&
-			context?.page?.host &&
-			context?.page?.path
+			(context?.page?.protocol && context?.page?.host && context?.page?.path
 				? `${context.page.protocol}://${context.page.host}${context.page.path}`
 				: context?.page?.path
 					? `https://${this.config.hostname}${context.page.path}`
@@ -246,11 +261,24 @@ export class PirschServerProvider extends BaseAnalyticsProvider {
 			user_agent: userAgent,
 			...(context?.page?.title && { title: context.page.title }),
 			...(context?.page?.referrer && { referrer: context.page.referrer }),
-			...(context?.device?.screen?.width && { screen_width: context.device.screen.width }),
-			...(context?.device?.screen?.height && { screen_height: context.device.screen.height }),
-			...(context?.device?.viewport?.width && { sec_ch_viewport_width: String(context.device.viewport.width) }),
-			...(context?.device?.language && { accept_language: context.device.language }),
-			...(context?.device?.type && { sec_ch_ua_mobile: context.device.type === 'mobile' || context.device.type === 'tablet' ? '?1' : '?0' }),
+			...(context?.device?.screen?.width && {
+				screen_width: context.device.screen.width,
+			}),
+			...(context?.device?.screen?.height && {
+				screen_height: context.device.screen.height,
+			}),
+			...(context?.device?.viewport?.width && {
+				sec_ch_viewport_width: String(context.device.viewport.width),
+			}),
+			...(context?.device?.language && {
+				accept_language: context.device.language,
+			}),
+			...(context?.device?.type && {
+				sec_ch_ua_mobile:
+					context.device.type === "mobile" || context.device.type === "tablet"
+						? "?1"
+						: "?0",
+			}),
 			...(context?.device?.os && { sec_ch_ua_platform: context.device.os }),
 			...(properties && {
 				tags: Object.fromEntries(

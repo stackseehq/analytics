@@ -4,17 +4,27 @@ import type {
 	BaseEvent,
 	EventCategory,
 	EventContext,
+	ProviderConfigOrProvider,
+	ProviderMethod,
 } from "@/core/events/types.js";
 import { isBrowser } from "@/utils/environment";
 
 // Default event map type
 type DefaultEventMap = Record<string, Record<string, unknown>>;
 
+/**
+ * Internal normalized provider configuration
+ */
+interface NormalizedProviderConfig {
+	provider: AnalyticsProvider;
+	enabledMethods: Set<ProviderMethod>;
+}
+
 export class BrowserAnalytics<
 	TEventMap extends DefaultEventMap = DefaultEventMap,
 	TUserTraits extends Record<string, unknown> = Record<string, unknown>,
 > {
-	private providers: AnalyticsProvider[] = [];
+	private providerConfigs: NormalizedProviderConfig[] = [];
 	private context: EventContext<TUserTraits> = {};
 	private userId?: string;
 	private sessionId?: string;
@@ -24,19 +34,19 @@ export class BrowserAnalytics<
 
 	/**
 	 * Creates a new BrowserAnalytics instance for client-side event tracking.
-	 * 
+	 *
 	 * Automatically generates a session ID and sets up the analytics context.
 	 * The instance will be ready to track events once initialized.
-	 * 
+	 *
 	 * @param config Analytics configuration including providers and default context
 	 * @param config.providers Array of analytics provider instances (e.g., PostHogClientProvider)
 	 * @param config.defaultContext Optional default context to include with all events
-	 * 
+	 *
 	 * @example
 	 * ```typescript
 	 * import { BrowserAnalytics } from '@stacksee/analytics/client';
 	 * import { PostHogClientProvider } from '@stacksee/analytics/providers/posthog';
-	 * 
+	 *
 	 * const analytics = new BrowserAnalytics({
 	 *   providers: [
 	 *     new PostHogClientProvider({
@@ -48,12 +58,12 @@ export class BrowserAnalytics<
 	 *     app: { version: '1.0.0' }
 	 *   }
 	 * });
-	 * 
+	 *
 	 * await analytics.initialize();
 	 * ```
 	 */
 	constructor(config: AnalyticsConfig) {
-		this.providers = config.providers;
+		this.providerConfigs = this.normalizeProviders(config.providers);
 
 		// Set default context
 		if (config.defaultContext) {
@@ -65,28 +75,100 @@ export class BrowserAnalytics<
 	}
 
 	/**
+	 * Normalizes provider configurations into a consistent internal format
+	 */
+	private normalizeProviders(
+		providers: ProviderConfigOrProvider[],
+	): NormalizedProviderConfig[] {
+		const allMethods: ProviderMethod[] = [
+			"initialize",
+			"identify",
+			"track",
+			"pageView",
+			"pageLeave",
+			"reset",
+		];
+
+		return providers.map((config) => {
+			// Simple provider instance - enable all methods
+			if ("initialize" in config && "track" in config) {
+				return {
+					provider: config as AnalyticsProvider,
+					enabledMethods: new Set(allMethods),
+				};
+			}
+
+			// Provider config with routing
+			const providerConfig = config as {
+				provider: AnalyticsProvider;
+				methods?: ProviderMethod[];
+				exclude?: ProviderMethod[];
+			};
+
+			// Validate mutually exclusive options
+			if (providerConfig.methods && providerConfig.exclude) {
+				console.warn(
+					`[Analytics] Provider ${providerConfig.provider.name} has both 'methods' and 'exclude' specified. Using 'methods' and ignoring 'exclude'.`,
+				);
+			}
+
+			let enabledMethods: Set<ProviderMethod>;
+
+			if (providerConfig.methods) {
+				// Only enable specified methods
+				enabledMethods = new Set(providerConfig.methods);
+			} else if (providerConfig.exclude) {
+				// Enable all methods except excluded ones
+				enabledMethods = new Set(
+					allMethods.filter(
+						(method) => !providerConfig.exclude?.includes(method),
+					),
+				);
+			} else {
+				// No routing config - enable all methods
+				enabledMethods = new Set(allMethods);
+			}
+
+			return {
+				provider: providerConfig.provider,
+				enabledMethods,
+			};
+		});
+	}
+
+	/**
+	 * Checks if a method should be called on a provider based on routing configuration
+	 */
+	private shouldCallMethod(
+		config: NormalizedProviderConfig,
+		method: ProviderMethod,
+	): boolean {
+		return config.enabledMethods.has(method);
+	}
+
+	/**
 	 * Initializes all analytics providers and sets up browser context.
-	 * 
+	 *
 	 * This method must be called before tracking events. It initializes all configured
 	 * providers and automatically captures browser context including page information,
 	 * device type, OS, and browser details.
-	 * 
+	 *
 	 * The method is safe to call multiple times and will not re-initialize if already done.
 	 * If called while initialization is in progress, it returns the existing promise.
-	 * 
+	 *
 	 * @returns Promise that resolves when initialization is complete
-	 * 
+	 *
 	 * @example
 	 * ```typescript
 	 * const analytics = new BrowserAnalytics({ providers: [] });
-	 * 
+	 *
 	 * // Initialize before tracking events
 	 * await analytics.initialize();
-	 * 
+	 *
 	 * // Now ready to track events
 	 * analytics.track('page_viewed', { page: '/dashboard' });
 	 * ```
-	 * 
+	 *
 	 * @example
 	 * ```typescript
 	 * // Safe to call multiple times
@@ -107,9 +189,9 @@ export class BrowserAnalytics<
 	}
 
 	private async _doInitialize(): Promise<void> {
-		// Initialize all providers
-		const initPromises = this.providers.map((provider) =>
-			provider.initialize(),
+		// Initialize all providers (initialize is always called regardless of routing)
+		const initPromises = this.providerConfigs.map((config) =>
+			config.provider.initialize(),
 		);
 
 		await Promise.all(initPromises);
@@ -214,8 +296,10 @@ export class BrowserAnalytics<
 			console.error("[Analytics] Failed to initialize during identify:", error);
 		});
 
-		for (const provider of this.providers) {
-			provider.identify(userId, traits);
+		for (const config of this.providerConfigs) {
+			if (this.shouldCallMethod(config, "identify")) {
+				config.provider.identify(userId, traits);
+			}
 		}
 	}
 
@@ -237,7 +321,7 @@ export class BrowserAnalytics<
 	 * @param eventName Name of the event to track (must match your event definitions)
 	 * @param properties Event-specific properties and data
 	 * @returns Promise that resolves when tracking is complete for all providers
-	 * 
+	 *
 	 * @example
 	 * ```typescript
 	 * // Track a simple event
@@ -313,27 +397,33 @@ export class BrowserAnalytics<
 		// Build context with user data
 		const contextWithUser: EventContext<TUserTraits> = {
 			...this.context,
-			user: this.userId || this.userTraits ? {
-				userId: this.userId,
-				email: this.userTraits && 'email' in this.userTraits
-					? (this.userTraits.email as string | undefined)
+			user:
+				this.userId || this.userTraits
+					? {
+							userId: this.userId,
+							email:
+								this.userTraits && "email" in this.userTraits
+									? (this.userTraits.email as string | undefined)
+									: undefined,
+							traits: this.userTraits,
+						}
 					: undefined,
-				traits: this.userTraits,
-			} : undefined,
 		};
 
-		// Track with all providers in parallel
-		const trackPromises = this.providers.map(async (provider) => {
-			try {
-				await provider.track(event, contextWithUser);
-			} catch (error) {
-				// Log error but don't throw - one provider failing shouldn't break others
-				console.error(
-					`[Analytics] Provider ${provider.name} failed to track event:`,
-					error,
-				);
-			}
-		});
+		// Track with all providers in parallel (respecting routing)
+		const trackPromises = this.providerConfigs
+			.filter((config) => this.shouldCallMethod(config, "track"))
+			.map(async (config) => {
+				try {
+					await config.provider.track(event, contextWithUser);
+				} catch (error) {
+					// Log error but don't throw - one provider failing shouldn't break others
+					console.error(
+						`[Analytics] Provider ${config.provider.name} failed to track event:`,
+						error,
+					);
+				}
+			});
 
 		// Wait for all providers to complete
 		await Promise.all(trackPromises);
@@ -341,22 +431,22 @@ export class BrowserAnalytics<
 
 	/**
 	 * Tracks a page view event.
-	 * 
+	 *
 	 * Automatically captures current page information (path, title, referrer) and
 	 * updates the analytics context. This method should be called when users
 	 * navigate to a new page or view.
-	 * 
+	 *
 	 * The method automatically ensures initialization but doesn't block execution
 	 * if initialization is still in progress.
-	 * 
+	 *
 	 * @param properties Optional properties to include with the page view
-	 * 
+	 *
 	 * @example
 	 * ```typescript
 	 * // Basic page view tracking
 	 * analytics.pageView();
 	 * ```
-	 * 
+	 *
 	 * @example
 	 * ```typescript
 	 * // Page view with additional properties
@@ -367,12 +457,12 @@ export class BrowserAnalytics<
 	 *   source: 'organic_search'
 	 * });
 	 * ```
-	 * 
+	 *
 	 * @example
 	 * ```typescript
 	 * // In a SvelteKit app with automatic navigation tracking
 	 * import { afterNavigate } from '$app/navigation';
-	 * 
+	 *
 	 * afterNavigate(() => {
 	 *   analytics.pageView({
 	 *     timestamp: Date.now(),
@@ -380,16 +470,16 @@ export class BrowserAnalytics<
 	 *   });
 	 * });
 	 * ```
-	 * 
+	 *
 	 * @example
 	 * ```typescript
 	 * // In a React app with React Router
 	 * import { useEffect } from 'react';
 	 * import { useLocation } from 'react-router-dom';
-	 * 
+	 *
 	 * function usePageTracking() {
 	 *   const location = useLocation();
-	 *   
+	 *
 	 *   useEffect(() => {
 	 *     analytics.pageView({
 	 *       path: location.pathname,
@@ -414,29 +504,31 @@ export class BrowserAnalytics<
 			},
 		});
 
-		for (const provider of this.providers) {
-			provider.pageView(properties, this.context);
+		for (const config of this.providerConfigs) {
+			if (this.shouldCallMethod(config, "pageView")) {
+				config.provider.pageView(properties, this.context);
+			}
 		}
 	}
 
 	/**
 	 * Tracks when a user leaves a page.
-	 * 
+	 *
 	 * This method should be called before navigation to track user engagement
 	 * and session duration. It's useful for understanding how long users spend
 	 * on different pages and their navigation patterns.
-	 * 
+	 *
 	 * Note: Not all analytics providers support page leave events. The method
 	 * will only call providers that implement the pageLeave method.
-	 * 
+	 *
 	 * @param properties Optional properties to include with the page leave event
-	 * 
+	 *
 	 * @example
 	 * ```typescript
 	 * // Basic page leave tracking
 	 * analytics.pageLeave();
 	 * ```
-	 * 
+	 *
 	 * @example
 	 * ```typescript
 	 * // Page leave with engagement metrics
@@ -447,14 +539,14 @@ export class BrowserAnalytics<
 	 *   exitIntent: true // detected exit intent
 	 * });
 	 * ```
-	 * 
+	 *
 	 * @example
 	 * ```typescript
 	 * // In a SvelteKit app with automatic navigation tracking
 	 * import { beforeNavigate } from '$app/navigation';
-	 * 
+	 *
 	 * let pageStartTime = Date.now();
-	 * 
+	 *
 	 * beforeNavigate(() => {
 	 *   analytics.pageLeave({
 	 *     duration: Date.now() - pageStartTime,
@@ -462,7 +554,7 @@ export class BrowserAnalytics<
 	 *   });
 	 * });
 	 * ```
-	 * 
+	 *
 	 * @example
 	 * ```typescript
 	 * // Track page leave on browser unload
@@ -477,32 +569,38 @@ export class BrowserAnalytics<
 	pageLeave(properties?: Record<string, unknown>): void {
 		// Run initialization if needed, but don't block
 		this.ensureInitialized().catch((error) => {
-			console.error("[Analytics] Failed to initialize during pageLeave:", error);
+			console.error(
+				"[Analytics] Failed to initialize during pageLeave:",
+				error,
+			);
 		});
 
-		for (const provider of this.providers) {
-			if (provider.pageLeave) {
-				provider.pageLeave(properties, this.context);
+		for (const config of this.providerConfigs) {
+			if (
+				this.shouldCallMethod(config, "pageLeave") &&
+				config.provider.pageLeave
+			) {
+				config.provider.pageLeave(properties, this.context);
 			}
 		}
 	}
 
 	/**
 	 * Resets the analytics state, clearing user ID and generating a new session.
-	 * 
+	 *
 	 * This method should be called when a user logs out or when you want to
 	 * start tracking a new user session. It clears the current user ID,
 	 * generates a new session ID, and calls reset on all providers.
-	 * 
+	 *
 	 * Use this method to ensure user privacy and accurate session tracking
 	 * when users switch accounts or log out.
-	 * 
+	 *
 	 * @example
 	 * ```typescript
 	 * // Basic reset on logout
 	 * analytics.reset();
 	 * ```
-	 * 
+	 *
 	 * @example
 	 * ```typescript
 	 * // In a logout handler
@@ -511,26 +609,26 @@ export class BrowserAnalytics<
 	 *   await analytics.track('user_logged_out', {
 	 *     sessionDuration: Date.now() - sessionStartTime
 	 *   });
-	 *   
+	 *
 	 *   // Reset analytics state
 	 *   analytics.reset();
-	 *   
+	 *
 	 *   // Clear user data and redirect
 	 *   clearUserData();
 	 *   window.location.href = '/login';
 	 * }
 	 * ```
-	 * 
+	 *
 	 * @example
 	 * ```typescript
 	 * // Account switching scenario
 	 * async function switchAccount(newUserId: string) {
 	 *   // Reset to clear previous user
 	 *   analytics.reset();
-	 *   
+	 *
 	 *   // Identify the new user
 	 *   analytics.identify(newUserId);
-	 *   
+	 *
 	 *   // Track account switch
 	 *   analytics.track('account_switched', {
 	 *     newUserId,
@@ -543,27 +641,29 @@ export class BrowserAnalytics<
 		this.userId = undefined;
 		this.userTraits = undefined;
 		this.sessionId = this.generateSessionId();
-		for (const provider of this.providers) {
-			provider.reset();
+		for (const config of this.providerConfigs) {
+			if (this.shouldCallMethod(config, "reset")) {
+				config.provider.reset();
+			}
 		}
 	}
 
 	/**
 	 * Updates the analytics context with new information.
-	 * 
+	 *
 	 * The context is included with all tracked events and provides additional
 	 * metadata about the user's environment, current page, device, and other
 	 * relevant information. This method merges new context with existing context.
-	 * 
+	 *
 	 * Context typically includes page information, device details, UTM parameters,
 	 * and custom application context.
-	 * 
+	 *
 	 * @param context Partial context to merge with existing context
 	 * @param context.page Page-related context (path, title, referrer)
 	 * @param context.device Device-related context (type, OS, browser)
 	 * @param context.utm UTM campaign tracking parameters
 	 * @param context.app Application-specific context
-	 * 
+	 *
 	 * @example
 	 * ```typescript
 	 * // Update page context
@@ -575,7 +675,7 @@ export class BrowserAnalytics<
 	 *   }
 	 * });
 	 * ```
-	 * 
+	 *
 	 * @example
 	 * ```typescript
 	 * // Add UTM parameters from URL
@@ -590,7 +690,7 @@ export class BrowserAnalytics<
 	 *   }
 	 * });
 	 * ```
-	 * 
+	 *
 	 * @example
 	 * ```typescript
 	 * // Update application context

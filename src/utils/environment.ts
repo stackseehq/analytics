@@ -7,7 +7,9 @@
  * @returns true if running in browser, false if in Node.js or other environments
  */
 export function isBrowser(): boolean {
-	return typeof window !== "undefined" && typeof window.document !== "undefined";
+	return (
+		typeof window !== "undefined" && typeof window.document !== "undefined"
+	);
 }
 
 /**
@@ -16,10 +18,12 @@ export function isBrowser(): boolean {
  */
 export function isNode(): boolean {
 	try {
-		return typeof process !== "undefined" && 
-			   typeof process.versions === "object" && 
-			   process.versions !== null && 
-			   !!process.versions.node;
+		return (
+			typeof process !== "undefined" &&
+			typeof process.versions === "object" &&
+			process.versions !== null &&
+			!!process.versions.node
+		);
 	} catch {
 		return false;
 	}
