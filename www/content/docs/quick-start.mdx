@@ -131,9 +131,13 @@ import type { AppEvents } from './events';
 
 export const analytics = createClientAnalytics<AppEvents>({
   providers: [
-    new BentoClientProvider({
-      siteUuid: 'your-bento-site-uuid'
-    })
+    // Bento doesn't support anonymous page views - exclude by default
+    {
+      provider: new BentoClientProvider({
+        siteUuid: 'your-bento-site-uuid'
+      }),
+      exclude: ['pageView']
+    }
   ],
   debug: import.meta.env.DEV
 });
@@ -233,13 +237,17 @@ import type { AppEvents } from './events';
 
 export const serverAnalytics = createServerAnalytics<AppEvents>({
   providers: [
-    new BentoServerProvider({
-      siteUuid: process.env.BENTO_SITE_UUID!,
-      authentication: {
-        publishableKey: process.env.BENTO_PUBLISHABLE_KEY!,
-        secretKey: process.env.BENTO_SECRET_KEY!
-      }
-    })
+    // Bento doesn't support anonymous page views - exclude by default
+    {
+      provider: new BentoServerProvider({
+        siteUuid: process.env.BENTO_SITE_UUID!,
+        authentication: {
+          publishableKey: process.env.BENTO_PUBLISHABLE_KEY!,
+          secretKey: process.env.BENTO_SECRET_KEY!
+        }
+      }),
+      exclude: ['pageView']
+    }
   ],
   debug: process.env.NODE_ENV === 'development'
 });
@@ -307,15 +315,18 @@ import { PostHogClientProvider, BentoClientProvider } from '@stacksee/analytics/
 
 export const analytics = createClientAnalytics<AppEvents>({
   providers: [
-    // Product analytics with PostHog
+    // Product analytics with PostHog (all events)
     new PostHogClientProvider({
       token: import.meta.env.VITE_POSTHOG_KEY!
     }),
 
-    // Email marketing with Bento
-    new BentoClientProvider({
-      siteUuid: import.meta.env.VITE_BENTO_SITE_UUID!
-    })
+    // Email marketing with Bento (exclude anonymous page views)
+    {
+      provider: new BentoClientProvider({
+        siteUuid: import.meta.env.VITE_BENTO_SITE_UUID!
+      }),
+      exclude: ['pageView']
+    }
   ]
 });
 

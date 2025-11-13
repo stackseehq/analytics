@@ -61,7 +61,11 @@ Send events to multiple analytics services with one call:
 const analytics = createClientAnalytics({
   providers: [
     new PostHogClientProvider({ token: 'xxx' }),  // Product analytics
-    new BentoClientProvider({ siteUuid: 'xxx' }),  // Email marketing
+    // Bento doesn't support anonymous page views - exclude pageView by default
+    {
+      provider: new BentoClientProvider({ siteUuid: 'xxx' }),  // Email marketing
+      exclude: ['pageView']
+    },
     new PirschClientProvider({ identificationCode: 'xxx' })  // Privacy-focused analytics
   ]
 });
@@ -78,7 +82,7 @@ analytics.track('user_signed_up', {
 If one provider fails, others continue working:
 
 ```typescript
-// PostHog is down, but Bento still receives events
+// PostHog is down, but other providers still receive events
 analytics.track('purchase', { amount: 99.99 });
 // ❌ PostHog fails silently
 // ✅ Bento receives event
@@ -192,7 +196,7 @@ analytics.identify('user-123', {
 
 // All providers are notified:
 // - PostHog creates/updates user profile
-// - Bento adds user to email list
+// - Bento adds/updates subscriber (requires email)
 // - Pirsch associates future events with this user
 ```
 
@@ -215,6 +219,8 @@ Without `shutdown()`, events may be lost when the serverless function terminates
 ## Provider Routing
 
 Sometimes you want to use a provider for specific methods only. For example, you might want Bento for email marketing (identify, track) but not for page views, or use different providers for different types of events.
+
+**Important:** Bento requires an email address for all events and does not support anonymous tracking. Always exclude `pageView` from Bento unless you're certain all visitors are identified before page views are tracked.
 
 ### Selective Method Routing
 
@@ -311,10 +317,10 @@ You can route these methods:
 **Reduce noise in specific providers:**
 
 ```typescript
-// Bento is for email automation - don't clutter it with page views
+// Bento is for email automation - exclude page views (they don't support anonymous tracking)
 {
   provider: new BentoClientProvider({ siteUuid: 'xxx' }),
-  exclude: ['pageView', 'pageLeave']
+  exclude: ['pageView']
 }
 ```
 
@@ -332,10 +338,10 @@ const analytics = createClientAnalytics({
       methods: ['identify']
     },
 
-    // Email marketing needs identity and conversion events
+    // Email marketing needs identity and conversion events (exclude page views)
     {
       provider: new BentoClientProvider({ siteUuid: 'xxx' }),
-      methods: ['identify', 'track']
+      exclude: ['pageView']  // or use methods: ['identify', 'track'] to be explicit
     }
   ]
 });
@@ -382,8 +388,11 @@ class CustomProvider extends BaseAnalyticsProvider {
 ```typescript
 const analytics = createClientAnalytics({
   providers: [
-    new PostHogClientProvider({ token: 'xxx' }),  // Track behavior
-    new BentoClientProvider({ siteUuid: 'xxx' })   // Send emails
+    new PostHogClientProvider({ token: 'xxx' }),  // Track all behavior
+    {
+      provider: new BentoClientProvider({ siteUuid: 'xxx' }),  // Email automation
+      exclude: ['pageView']  // Bento requires email, skip anonymous page views
+    }
   ]
 });
 ```
@@ -426,9 +435,12 @@ if (userConsent.analytics) {
   providers.push(new PostHogClientProvider({ token: 'xxx' }));
 }
 
-// Only use Bento in production
+// Only use Bento in production (exclude page views by default)
 if (process.env.NODE_ENV === 'production') {
-  providers.push(new BentoClientProvider({ siteUuid: 'xxx' }));
+  providers.push({
+    provider: new BentoClientProvider({ siteUuid: 'xxx' }),
+    exclude: ['pageView']
+  });
 }
 
 const analytics = createClientAnalytics({ providers });
@@ -502,7 +514,10 @@ Providers handle errors gracefully:
 const analytics = createClientAnalytics({
   providers: [
     new PostHogClientProvider({ token: 'xxx' }),
-    new BentoClientProvider({ siteUuid: 'xxx' })
+    {
+      provider: new BentoClientProvider({ siteUuid: 'xxx' }),
+      exclude: ['pageView']  // Recommended for Bento
+    }
   ]
 });
 
