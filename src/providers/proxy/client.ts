@@ -54,7 +54,7 @@ export class ProxyProvider extends BaseAnalyticsProvider {
 		super({ debug: config.debug, enabled: config.enabled });
 		this.config = config;
 		this.batchSize = config.batch?.size ?? 10;
-		this.batchInterval = config.batch?.interval ?? 5000;
+		this.batchInterval = config.batch?.interval ?? 2000;
 		this.retryAttempts = config.retry?.attempts ?? 3;
 		this.retryBackoff = config.retry?.backoff ?? "exponential";
 		this.retryInitialDelay = config.retry?.initialDelay ?? 1000;
@@ -158,14 +158,17 @@ export class ProxyProvider extends BaseAnalyticsProvider {
 			return;
 		}
 
-		// Schedule flush if not already scheduled
-		if (!this.flushTimer) {
-			this.flushTimer = setTimeout(() => {
-				this.flush().catch((error) => {
-					console.error("[Proxy] Failed to flush events:", error);
-				});
-			}, this.batchInterval);
+		// Clear existing timer and schedule a new one
+		// This ensures the timer always fires batchInterval ms after the LAST event
+		if (this.flushTimer) {
+			clearTimeout(this.flushTimer);
 		}
+
+		this.flushTimer = setTimeout(() => {
+			this.flush().catch((error) => {
+				console.error("[Proxy] Failed to flush events:", error);
+			});
+		}, this.batchInterval);
 	}
 
 	private async sendEvents(

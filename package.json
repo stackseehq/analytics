@@ -1,6 +1,6 @@
 {
 	"name": "@stacksee/analytics",
-	"version": "0.9.8",
+	"version": "0.9.9",
 	"description": "A highly typed, provider-agnostic analytics library for TypeScript applications",
 	"type": "module",
 	"exports": {
@@ -27,7 +27,11 @@
 	},
 	"main": "./dist/index.js",
 	"types": "./dist/index.d.ts",
-	"files": ["dist", "README.md", "LICENSE"],
+	"files": [
+		"dist",
+		"README.md",
+		"LICENSE"
+	],
 	"scripts": {
 		"test": "vitest run",
 		"test:watch": "vitest",
