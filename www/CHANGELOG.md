@@ -4,6 +4,13 @@
 
 ### Patch Changes
 
+- Updated dependencies [[`e9af485`](https://github.com/stackseehq/analytics/commit/e9af485523a433f946035661939370d389435bca)]:
+  - @stacksee/analytics@0.10.0
+
+## 0.0.5
+
+### Patch Changes
+
 - Updated dependencies:
   - @stacksee/analytics@0.9.8
 
