@@ -1,5 +1,45 @@
 # @stacksee/analytics
 
+## 0.11.0
+
+### Minor Changes
+
+- feat: add EmitKit server provider ([`b4d5561`](https://github.com/stackseehq/analytics/commit/b4d55618e362f8fd4b7f6e6e0275298c19bd7738))
+
+  Adds support for EmitKit as a server-side analytics provider. EmitKit is a notification and event tracking service that allows you to send events to channels with rich metadata.
+
+  **New Provider:**
+
+  - `EmitKitServerProvider` - Server-side provider for EmitKit API
+
+  **Features:**
+
+  - User identification with alias support (email, username, custom identifiers)
+  - Event tracking with configurable channels and rich metadata
+  - Page view tracking
+  - Auto-formatted event titles and category-based icons
+  - Support for tags, notifications, and display modes
+  - Rate limit handling
+
+  **Configuration:**
+
+  ```typescript
+  import { EmitKitServerProvider } from "@stacksee/analytics/providers/server";
+
+  const analytics = new ServerAnalytics({
+    providers: [
+      new EmitKitServerProvider({
+        apiKey: "emitkit_xxxxx",
+        channelName: "analytics",
+        notify: true,
+        displayAs: "notification",
+      }),
+    ],
+  });
+  ```
+
+  **Note:** EmitKit is server-only. For client-side events, use the proxy pattern to forward events from the browser to your server endpoint.
+
 ## 0.10.0
 
 ### Minor Changes
