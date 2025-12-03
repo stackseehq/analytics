@@ -16,6 +16,10 @@ export type {
 export { PirschServerProvider } from "./pirsch/server.js";
 export type { PirschServerConfig } from "./pirsch/server.js";
 
+// EmitKit server provider
+export { EmitKitServerProvider } from "./emitkit/server.js";
+export type { EmitKitServerConfig } from "./emitkit/server.js";
+
 // Proxy helpers (for ingesting client-side events)
 export { ingestProxyEvents, createProxyHandler } from "./proxy/server.js";
 export type { IngestProxyEventsConfig } from "./proxy/server.js";

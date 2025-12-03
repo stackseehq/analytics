@@ -11,6 +11,9 @@ importers:
       '@bentonow/bento-node-sdk':
         specifier: ^0.2.1
         version: 0.2.1
+      '@emitkit/js':
+        specifier: ^2.1.0
+        version: 2.1.0
       pirsch-sdk:
         specifier: ^2.9.1
         version: 2.9.1
@@ -31,7 +34,7 @@ importers:
         specifier: ^1.2.0
         version: 1.2.0
       '@types/node':
-        specifier: ^20.14.11
+        specifier: ^20.17.51
         version: 20.17.51
       '@vitest/coverage-v8':
         specifier: 3.1.4
@@ -424,6 +427,9 @@ packages:
   '@csstools/css-tokenizer@3.0.4':
     resolution: {integrity: sha512-Vd/9EVDiu6PPJt9yAh6roZP6El1xHrdvIVGjyBsHR0RYwNHgL7FJPyIIW4fANJNG6FtyZfvlRPpFI4ZM/lubvw==}
     engines: {node: '>=18'}
+
+  '@emitkit/js@2.1.0':
+    resolution: {integrity: sha512-M/O3e2StARdpt8hYa+mOq++nFpwghoPaxvOmM0xmRe9RyIGAkEcKRcQcXJwsQTOryXSi9cj0kWMQeXMRlNFgiA==}
 
   '@emnapi/runtime@1.6.0':
     resolution: {integrity: sha512-obtUmAHTMjll499P+D9A3axeJFlhdjOWdKUNs/U6QIGT7V5RjcUW1xToAzjvmgTSQhDbYn/NwfTRoJcQ2rNBxA==}
@@ -3404,6 +3410,7 @@ packages:
   next@16.0.1:
     resolution: {integrity: sha512-e9RLSssZwd35p7/vOa+hoDFggUZIUbZhIUSLZuETCwrCVvxOs87NamoUzT+vbcNAL8Ld9GobBnWOA6SbV/arOw==}
     engines: {node: '>=20.9.0'}
+    deprecated: This version has a security vulnerability. Please upgrade to a patched version. See https://nextjs.org/blog/CVE-2025-66478 for more details.
     hasBin: true
     peerDependencies:
       '@opentelemetry/api': ^1.1.0
@@ -4647,6 +4654,9 @@ snapshots:
       '@csstools/css-tokenizer': 3.0.4
 
   '@csstools/css-tokenizer@3.0.4': {}
+
+  '@emitkit/js@2.1.0':
+    optional: true
 
   '@emnapi/runtime@1.6.0':
     dependencies:
