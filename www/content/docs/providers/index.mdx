@@ -17,6 +17,9 @@ Providers are plugins that send your events to analytics services. @stacksee/ana
   <Card title="Pirsch" href="/docs/providers/pirsch" icon="shield">
     Privacy-focused, cookie-free web analytics
   </Card>
+  <Card title="EmitKit" href="/docs/providers/emitkit" icon="bell">
+    Event notifications and activity feeds with rich metadata
+  </Card>
   <Card title="Proxy Provider" href="/docs/providers/proxy" icon="arrow-right-left">
     Route events through your server to bypass ad-blockers
   </Card>
@@ -29,19 +32,22 @@ Providers are plugins that send your events to analytics services. @stacksee/ana
 | **PostHog** | Product Analytics | Feature flags, session replay, funnels | Configurable | ✅ Generous |
 | **Bento** | Email Marketing | Email campaigns, user segmentation | Standard | ✅ Limited |
 | **Pirsch** | Web Analytics | Cookie-free tracking, GDPR compliance | ✅ Privacy-first | Trial only |
+| **EmitKit** | Notifications | Activity feeds, event logging, alerts | Standard | ✅ Available |
 
 ## Feature Comparison
 
-| Feature | PostHog | Bento | Pirsch |
-|---------|---------|-------|--------|
-| **Analytics** | ✅ Advanced | ✅ Basic | ✅ Privacy-focused |
-| **Email Marketing** | ❌ | ✅ | ❌ |
-| **Feature Flags** | ✅ | ❌ | ❌ |
-| **Session Replay** | ✅ | ❌ | ❌ |
-| **User Segmentation** | ✅ | ✅ | ⚠️ Limited |
-| **Real-time Events** | ✅ | ⚠️ 1-3min delay | ✅ |
-| **Cookie-Free** | ❌ | ❌ | ✅ |
-| **Self-hosted** | ✅ | ❌ | ✅ |
+| Feature | PostHog | Bento | Pirsch | EmitKit |
+|---------|---------|-------|--------|---------|
+| **Analytics** | ✅ Advanced | ✅ Basic | ✅ Privacy-focused | ⚠️ Basic |
+| **Email Marketing** | ❌ | ✅ | ❌ | ❌ |
+| **Notifications** | ❌ | ⚠️ Email only | ❌ | ✅ |
+| **Feature Flags** | ✅ | ❌ | ❌ | ❌ |
+| **Session Replay** | ✅ | ❌ | ❌ | ❌ |
+| **User Segmentation** | ✅ | ✅ | ⚠️ Limited | ✅ |
+| **Real-time Events** | ✅ | ⚠️ 1-3min delay | ✅ | ✅ |
+| **Cookie-Free** | ❌ | ❌ | ✅ | ✅ |
+| **Self-hosted** | ✅ | ❌ | ✅ | ❌ |
+| **User Aliasing** | ✅ | ⚠️ Limited | ❌ | ✅ |
 
 ## Quick Setup
 
@@ -95,6 +101,23 @@ new PirschClientProvider({
 ```
 
 [Full Pirsch Documentation →](/docs/providers/pirsch)
+
+### EmitKit
+
+```bash
+# Server-only: pnpm install @emitkit/js
+```
+
+```typescript
+import { EmitKitServerProvider } from '@stacksee/analytics/providers/server';
+
+new EmitKitServerProvider({
+  apiKey: 'emitkit_xxxxx',
+  channelName: 'analytics'
+})
+```
+
+[Full EmitKit Documentation →](/docs/providers/emitkit)
 
 ## Using Multiple Providers
 
@@ -245,6 +268,9 @@ export class CustomProvider extends BaseAnalyticsProvider {
   </Card>
   <Card title="Pirsch Provider" href="/docs/providers/pirsch" icon="shield">
     Privacy-focused web analytics
+  </Card>
+  <Card title="EmitKit Provider" href="/docs/providers/emitkit" icon="bell">
+    Event notifications and activity feeds
   </Card>
   <Card title="Custom Providers" href="/docs/providers/custom" icon="code">
     Create your own provider

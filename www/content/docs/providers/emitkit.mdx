@@ -1,0 +1,258 @@
+---
+title: EmitKit Provider
+description: Event notifications and activity feeds with rich metadata
+---
+
+EmitKit is a notification and event tracking service that allows you to send events to channels with rich metadata, user identification, and flexible display options.
+
+## Installation
+
+```bash
+# Server-side only:
+pnpm install @emitkit/js
+```
+
+## Important Notes
+
+**EmitKit is server-side only.** The EmitKit SDK does not provide a client-side package. For client-side event tracking, use the [Proxy Provider](/docs/providers/proxy) to forward events from the browser to your server, where they can be sent to EmitKit.
+
+## Server-Side Usage
+
+### Basic Configuration
+
+```typescript
+import { createServerAnalytics } from '@stacksee/analytics/server';
+import { EmitKitServerProvider } from '@stacksee/analytics/providers/server';
+
+const serverAnalytics = createServerAnalytics({
+  providers: [
+    new EmitKitServerProvider({
+      apiKey: process.env.EMITKIT_API_KEY!, // starts with 'emitkit_'
+      channelName: 'analytics', // default channel
+      notify: true, // send notifications (default: true)
+      displayAs: 'notification' // 'message' | 'notification'
+    })
+  ]
+});
+
+serverAnalytics.initialize();
+```
+
+### Tracking Events
+
+```typescript
+// Track a custom event
+await serverAnalytics.track('purchase_completed', {
+  orderId: 'order-123',
+  amount: 99.99,
+  currency: 'USD'
+}, {
+  userId: 'user-456',
+  user: {
+    email: 'user@example.com',
+    traits: {
+      plan: 'pro',
+      company: 'Acme Corp'
+    }
+  }
+});
+```
+
+### User Identification
+
+EmitKit supports powerful user aliasing, allowing you to reference users by multiple identifiers:
+
+```typescript
+// Identify user with aliases
+serverAnalytics.identify('user-123', {
+  email: 'john@example.com',
+  name: 'John Doe',
+  username: 'johndoe',
+  plan: 'pro'
+});
+
+// Now you can track events using any of these identifiers
+await serverAnalytics.track('feature_used', {
+  feature: 'export'
+}, {
+  userId: 'john@example.com' // Email works as alias!
+});
+```
+
+## Client-to-Server with Proxy
+
+Since EmitKit is server-only, use the proxy pattern for client-side events:
+
+### Client Setup
+
+```typescript
+import { createClientAnalytics } from '@stacksee/analytics/client';
+import { ProxyProvider } from '@stacksee/analytics/providers/client';
+
+const analytics = createClientAnalytics({
+  providers: [
+    new ProxyProvider({
+      endpoint: '/api/analytics'
+    })
+  ]
+});
+
+await analytics.initialize();
+
+// Events are queued and sent to your API endpoint
+analytics.track('button_clicked', { buttonId: 'signup' });
+```
+
+### Server API Endpoint
+
+```typescript
+// app/api/analytics/route.ts (Next.js example)
+import { createServerAnalytics } from '@stacksee/analytics/server';
+import { EmitKitServerProvider } from '@stacksee/analytics/providers/server';
+import { ingestProxyEvents } from '@stacksee/analytics/providers/server';
+
+const serverAnalytics = createServerAnalytics({
+  providers: [
+    new EmitKitServerProvider({
+      apiKey: process.env.EMITKIT_API_KEY!,
+      channelName: 'user-activity'
+    })
+  ]
+});
+
+serverAnalytics.initialize();
+
+export async function POST(request: Request) {
+  await ingestProxyEvents(request, serverAnalytics);
+  return new Response('OK');
+}
+```
+
+## Configuration Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `apiKey` | `string` | **required** | Your EmitKit API key (starts with `emitkit_`) |
+| `channelName` | `string` | `'analytics'` | Default channel for events |
+| `notify` | `boolean` | `true` | Send notifications for events |
+| `displayAs` | `'message' \| 'notification'` | `'notification'` | Display style for events |
+| `debug` | `boolean` | `false` | Enable debug logging |
+| `enabled` | `boolean` | `true` | Enable/disable the provider |
+
+## Features
+
+### Auto-Formatted Event Titles
+
+Event names are automatically formatted into readable titles:
+
+```typescript
+// 'user_signed_up' → 'User Signed Up'
+// 'purchase_completed' → 'Purchase Completed'
+await serverAnalytics.track('user_signed_up', {
+  plan: 'pro'
+});
+```
+
+### Category-Based Icons
+
+Events automatically get icons based on their category:
+
+- `engagement` → 👆
+- `user` → 👤
+- `navigation` → 🧭
+- `error` → ❌
+- `performance` → ⚡
+- `conversion` → 💰
+
+### Rich Metadata
+
+All event context is included as metadata:
+
+```typescript
+await serverAnalytics.track('page_viewed', {
+  pageName: 'Dashboard'
+}, {
+  userId: 'user-123',
+  context: {
+    page: { path: '/dashboard', title: 'Dashboard' },
+    device: { userAgent: req.headers['user-agent'] },
+    utm: { source: 'google', medium: 'cpc' }
+  }
+});
+```
+
+### User Aliasing
+
+EmitKit supports multiple identifiers per user:
+
+```typescript
+serverAnalytics.identify('user-123', {
+  email: 'john@example.com',
+  username: 'johndoe',
+  name: 'John Doe'
+});
+
+// Creates aliases for:
+// - user-123 (user ID)
+// - john@example.com (email)
+// - johndoe (username)
+```
+
+## Typical Use Cases
+
+EmitKit works best for:
+
+- **Activity feeds** - Real-time user activity streams
+- **Notification systems** - Alert users about important events
+- **Event logging** - Centralized event tracking with rich metadata
+- **User journey tracking** - Monitor user behavior with context
+- **Internal dashboards** - Team visibility into product usage
+
+**Use with other providers:**
+- Combine with PostHog/Pirsch for analytics dashboards
+- Combine with Bento for email marketing automation
+- Use proxy pattern for unified client/server tracking
+
+## Provider Routing
+
+Recommended setup with multiple providers:
+
+```typescript
+import { createServerAnalytics } from '@stacksee/analytics/server';
+import { EmitKitServerProvider } from '@stacksee/analytics/providers/server';
+import { PostHogServerProvider } from '@stacksee/analytics/providers/server';
+
+const serverAnalytics = createServerAnalytics({
+  providers: [
+    // Use PostHog for analytics and dashboards
+    new PostHogServerProvider({
+      apiKey: process.env.POSTHOG_API_KEY!
+    }),
+    // Use EmitKit for activity feeds and notifications
+    {
+      provider: new EmitKitServerProvider({
+        apiKey: process.env.EMITKIT_API_KEY!,
+        channelName: 'user-activity',
+        notify: true
+      }),
+      // Only send important events to EmitKit
+      methods: ['track', 'identify']
+    }
+  ]
+});
+```
+
+## Best Practices
+
+1. **Use meaningful channel names** - Organize events by domain (e.g., 'payments', 'user-signups')
+2. **Leverage user aliasing** - Always include email and username for flexible identification
+3. **Include rich context** - Add page, device, and UTM data for better insights
+4. **Combine with analytics providers** - Use EmitKit for notifications, PostHog for analytics
+5. **Use the proxy pattern** - Forward client events through your server to EmitKit
+
+## Resources
+
+- [EmitKit Documentation](https://emitkit.com/docs)
+- [EmitKit JavaScript SDK](https://www.npmjs.com/package/@emitkit/js)
+- [Proxy Provider Guide](/docs/providers/proxy)
+- [Provider Routing Guide](/docs/core-concepts/providers#provider-routing)
