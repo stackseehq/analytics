@@ -13,9 +13,30 @@ export interface EmitKitServerConfig {
 
 	/**
 	 * Default channel name for events
-	 * @default 'analytics'
+	 * @default 'general'
 	 */
 	channelName?: string;
+
+	/**
+	 * Map event categories to specific EmitKit channels.
+	 * Allows automatic routing of events to appropriate channels based on category.
+	 *
+	 * @example
+	 * ```typescript
+	 * {
+	 *   'user': 'user-activity',
+	 *   'engagement': 'product-usage',
+	 *   'error': 'alerts',
+	 *   'conversion': 'revenue'
+	 * }
+	 * ```
+	 *
+	 * Channel resolution priority:
+	 * 1. Event property `__emitkit_channel` (highest priority)
+	 * 2. Category mapping via `categoryChannelMap`
+	 * 3. Default `channelName` (fallback, default: 'general')
+	 */
+	categoryChannelMap?: Record<string, string>;
 
 	/**
 	 * Send notification for events
@@ -93,7 +114,7 @@ export class EmitKitServerProvider extends BaseAnalyticsProvider {
 
 		// Extract email from traits
 		const email = (traits?.email as string | undefined) || userId;
-		if (email && email.includes("@")) {
+		if (email?.includes("@")) {
 			this.currentUserEmail = email;
 		}
 
@@ -162,8 +183,11 @@ export class EmitKitServerProvider extends BaseAnalyticsProvider {
 		const title = this.formatEventTitle(event.action);
 
 		// Build metadata from event properties and context
+		// Strip __emitkit_channel from properties as it's internal routing metadata
+		const { __emitkit_channel, ...cleanProperties } = event.properties || {};
+
 		const metadata: Record<string, unknown> = {
-			...event.properties,
+			...cleanProperties,
 			category: event.category,
 			timestamp: event.timestamp || Date.now(),
 			...(event.sessionId && { sessionId: event.sessionId }),
@@ -191,15 +215,15 @@ export class EmitKitServerProvider extends BaseAnalyticsProvider {
 
 		// Add any custom tags from properties
 		if (
-			event.properties?.tags &&
-			Array.isArray(event.properties.tags) &&
-			event.properties.tags.every((t) => typeof t === "string")
+			cleanProperties?.tags &&
+			Array.isArray(cleanProperties.tags) &&
+			cleanProperties.tags.every((t) => typeof t === "string")
 		) {
-			tags.push(...(event.properties.tags as string[]));
+			tags.push(...(cleanProperties.tags as string[]));
 		}
 
-		// Determine channel name
-		const channelName = this.config.channelName || "analytics";
+		// Determine channel name using resolution logic
+		const channelName = this.resolveChannelName(event);
 
 		try {
 			const result = await this.client.events.create({
@@ -237,9 +261,12 @@ export class EmitKitServerProvider extends BaseAnalyticsProvider {
 			this.currentUserEmail ||
 			this.currentUserId;
 
+		// Strip __emitkit_channel from properties if present
+		const { __emitkit_channel, ...cleanProperties } = properties || {};
+
 		// Build page view metadata
 		const metadata: Record<string, unknown> = {
-			...properties,
+			...cleanProperties,
 			date: new Date().toISOString(),
 			...(context?.page && {
 				page: {
@@ -257,8 +284,16 @@ export class EmitKitServerProvider extends BaseAnalyticsProvider {
 			...(context?.server && { server: context.server }),
 		};
 
-		// Determine channel name
-		const channelName = this.config.channelName || "analytics";
+		// Create a synthetic event for channel resolution
+		// Page views use 'navigation' category
+		const syntheticEvent: BaseEvent = {
+			action: "page_view",
+			category: "navigation",
+			properties: properties || {},
+		};
+
+		// Determine channel name using resolution logic
+		const channelName = this.resolveChannelName(syntheticEvent);
 
 		// Create page view event
 		this.client.events
@@ -279,6 +314,7 @@ export class EmitKitServerProvider extends BaseAnalyticsProvider {
 					eventId: result.data.id,
 					path: context?.page?.path,
 					userId,
+					channelName,
 				});
 			})
 			.catch((error) => {
@@ -361,5 +397,35 @@ export class EmitKitServerProvider extends BaseAnalyticsProvider {
 		};
 
 		return categoryIcons[category];
+	}
+
+	/**
+	 * Resolve the channel name for an event based on priority:
+	 * 1. Event property __emitkit_channel (highest priority)
+	 * 2. Category mapping via categoryChannelMap
+	 * 3. Default channelName (fallback, default: 'general')
+	 */
+	private resolveChannelName(
+		event: BaseEvent,
+		defaultChannel?: string,
+	): string {
+		// Priority 1: Check for explicit channel override in properties
+		if (
+			event.properties?.__emitkit_channel &&
+			typeof event.properties.__emitkit_channel === "string"
+		) {
+			return event.properties.__emitkit_channel;
+		}
+
+		// Priority 2: Check category mapping
+		if (this.config.categoryChannelMap && event.category) {
+			const mappedChannel = this.config.categoryChannelMap[event.category];
+			if (mappedChannel) {
+				return mappedChannel;
+			}
+		}
+
+		// Priority 3: Use default channel
+		return defaultChannel || this.config.channelName || "general";
 	}
 }

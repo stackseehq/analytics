@@ -28,7 +28,7 @@ const serverAnalytics = createServerAnalytics({
   providers: [
     new EmitKitServerProvider({
       apiKey: process.env.EMITKIT_API_KEY!, // starts with 'emitkit_'
-      channelName: 'analytics', // default channel
+      channelName: 'general', // default channel (default: 'general')
       notify: true, // send notifications (default: true)
       displayAs: 'notification' // 'message' | 'notification'
     })
@@ -133,11 +133,138 @@ export async function POST(request: Request) {
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `apiKey` | `string` | **required** | Your EmitKit API key (starts with `emitkit_`) |
-| `channelName` | `string` | `'analytics'` | Default channel for events |
+| `channelName` | `string` | `'general'` | Default channel for events |
+| `categoryChannelMap` | `Record<string, string>` | `undefined` | Map event categories to specific channels |
 | `notify` | `boolean` | `true` | Send notifications for events |
 | `displayAs` | `'message' \| 'notification'` | `'notification'` | Display style for events |
 | `debug` | `boolean` | `false` | Enable debug logging |
 | `enabled` | `boolean` | `true` | Enable/disable the provider |
+
+## Channel Routing
+
+EmitKit's power comes from its channel system, similar to Slack channels, where you can organize events into different streams. The provider supports flexible channel routing to automatically send events to the right channels.
+
+### Channel Resolution Priority
+
+Events are routed to channels based on this priority order:
+
+1. **Event property override** (highest priority) - Use `__emitkit_channel` in event properties
+2. **Category mapping** - Map event categories to channels via `categoryChannelMap`
+3. **Default channel** (fallback) - Use the `channelName` config option (default: `'general'`)
+
+### Default Channel
+
+Set a global default channel for all events:
+
+```typescript
+const serverAnalytics = createServerAnalytics({
+  providers: [
+    new EmitKitServerProvider({
+      apiKey: process.env.EMITKIT_API_KEY!,
+      channelName: 'app-events' // All events go here by default
+    })
+  ]
+});
+```
+
+### Category-Based Channel Mapping
+
+Automatically route events to specific channels based on their category:
+
+```typescript
+const serverAnalytics = createServerAnalytics({
+  providers: [
+    new EmitKitServerProvider({
+      apiKey: process.env.EMITKIT_API_KEY!,
+      channelName: 'general', // Fallback channel
+      categoryChannelMap: {
+        'user': 'user-activity',      // All user events → user-activity
+        'engagement': 'product-usage', // All engagement → product-usage
+        'error': 'alerts',             // All errors → alerts
+        'conversion': 'revenue',       // All conversions → revenue
+        'navigation': 'page-views'     // All navigation → page-views
+      }
+    })
+  ]
+});
+
+// This event automatically goes to 'user-activity' channel
+await serverAnalytics.track('user_signed_up', {
+  plan: 'pro'
+});
+
+// This event automatically goes to 'alerts' channel
+await serverAnalytics.track('api_error', {
+  endpoint: '/api/users',
+  statusCode: 500
+});
+```
+
+**Predefined Categories:**
+- `user` - User lifecycle events (signup, login, etc.)
+- `engagement` - Feature usage and interactions
+- `error` - Errors and exceptions
+- `conversion` - Conversion and revenue events
+- `navigation` - Page views and navigation
+- `performance` - Performance metrics
+
+You can also use custom categories for your specific needs.
+
+### Per-Event Channel Override
+
+Override the channel for specific critical events:
+
+```typescript
+// Send critical payment to a dedicated channel
+await serverAnalytics.track('payment_processed', {
+  amount: 10000,
+  currency: 'USD',
+  __emitkit_channel: 'critical-payments' // Override to critical channel
+});
+
+// Send error alert to team notification channel
+await serverAnalytics.track('service_down', {
+  service: 'api',
+  __emitkit_channel: 'team-alerts'
+});
+```
+
+The `__emitkit_channel` property is automatically stripped from the metadata sent to EmitKit - it's only used for internal routing.
+
+### Complete Example
+
+Combining all three routing methods:
+
+```typescript
+const serverAnalytics = createServerAnalytics({
+  providers: [
+    new EmitKitServerProvider({
+      apiKey: process.env.EMITKIT_API_KEY!,
+      channelName: 'general', // Fallback for unmapped categories
+      categoryChannelMap: {
+        'user': 'user-activity',
+        'error': 'alerts',
+        'conversion': 'revenue'
+      }
+    })
+  ]
+});
+
+// Goes to 'user-activity' (category mapping)
+await serverAnalytics.track('user_signed_up', { plan: 'pro' });
+
+// Goes to 'alerts' (category mapping)
+await serverAnalytics.track('api_error', { endpoint: '/users' });
+
+// Goes to 'critical-payments' (event override)
+await serverAnalytics.track('large_payment', {
+  amount: 50000,
+  __emitkit_channel: 'critical-payments'
+});
+
+// Goes to 'general' (no mapping, uses default)
+await serverAnalytics.track('feature_flag_changed', { flag: 'beta' });
+```
 
 ## Features
 
@@ -244,11 +371,28 @@ const serverAnalytics = createServerAnalytics({
 
 ## Best Practices
 
-1. **Use meaningful channel names** - Organize events by domain (e.g., 'payments', 'user-signups')
-2. **Leverage user aliasing** - Always include email and username for flexible identification
-3. **Include rich context** - Add page, device, and UTM data for better insights
-4. **Combine with analytics providers** - Use EmitKit for notifications, PostHog for analytics
-5. **Use the proxy pattern** - Forward client events through your server to EmitKit
+1. **Organize with channels** - Use category mapping to automatically route events to appropriate channels
+   ```typescript
+   categoryChannelMap: {
+     'user': 'user-activity',
+     'error': 'alerts',
+     'conversion': 'revenue'
+   }
+   ```
+
+2. **Use meaningful channel names** - Name channels by domain (e.g., `'payments'`, `'user-signups'`, `'team-alerts'`)
+
+3. **Reserve overrides for critical events** - Use `__emitkit_channel` sparingly for high-priority events that need special attention
+
+4. **Leverage user aliasing** - Always include email and username for flexible identification
+
+5. **Include rich context** - Add page, device, and UTM data for better insights
+
+6. **Combine with analytics providers** - Use EmitKit for notifications and activity feeds, PostHog for analytics dashboards
+
+7. **Use the proxy pattern** - Forward client events through your server to EmitKit for client-side tracking
+
+8. **Map standard categories** - Start with the predefined categories (`user`, `engagement`, `error`, `conversion`, `navigation`, `performance`) before creating custom ones
 
 ## Resources
 
