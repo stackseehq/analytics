@@ -1,7 +1,7 @@
 import { ServerAnalytics } from "@/adapters/server/server-analytics.js";
 import type {
 	AnalyticsConfig,
-	AnalyticsProvider,
+	ProviderConfigOrProvider,
 } from "@/core/events/types.js";
 import type {
 	EventCollection,
@@ -9,7 +9,7 @@ import type {
 } from "@/core/events/index.js";
 
 export interface ServerAnalyticsConfig {
-	providers?: AnalyticsProvider[];
+	providers?: ProviderConfigOrProvider[];
 	debug?: boolean;
 	enabled?: boolean;
 }

@@ -18,6 +18,9 @@ type DefaultEventMap = Record<string, Record<string, unknown>>;
 interface NormalizedProviderConfig {
 	provider: AnalyticsProvider;
 	enabledMethods: Set<ProviderMethod>;
+	enabledEvents?: Set<string>;
+	excludedEvents?: Set<string>;
+	eventPatterns?: RegExp[];
 }
 
 export class BrowserAnalytics<
@@ -103,12 +106,32 @@ export class BrowserAnalytics<
 				provider: AnalyticsProvider;
 				methods?: ProviderMethod[];
 				exclude?: ProviderMethod[];
+				events?: string[];
+				excludeEvents?: string[];
+				eventPatterns?: string[];
 			};
 
-			// Validate mutually exclusive options
+			// Validate mutually exclusive method options
 			if (providerConfig.methods && providerConfig.exclude) {
 				console.warn(
 					`[Analytics] Provider ${providerConfig.provider.name} has both 'methods' and 'exclude' specified. Using 'methods' and ignoring 'exclude'.`,
+				);
+			}
+
+			// Validate mutually exclusive event options
+			if (providerConfig.events && providerConfig.excludeEvents) {
+				console.warn(
+					`[Analytics] Provider ${providerConfig.provider.name} has both 'events' and 'excludeEvents' specified. Using 'events' and ignoring 'excludeEvents'.`,
+				);
+			}
+			if (providerConfig.events && providerConfig.eventPatterns) {
+				console.warn(
+					`[Analytics] Provider ${providerConfig.provider.name} has both 'events' and 'eventPatterns' specified. Using 'events' and ignoring 'eventPatterns'.`,
+				);
+			}
+			if (providerConfig.excludeEvents && providerConfig.eventPatterns) {
+				console.warn(
+					`[Analytics] Provider ${providerConfig.provider.name} has both 'excludeEvents' and 'eventPatterns' specified. Using 'eventPatterns' and ignoring 'excludeEvents'.`,
 				);
 			}
 
@@ -129,9 +152,38 @@ export class BrowserAnalytics<
 				enabledMethods = new Set(allMethods);
 			}
 
+			// Process event filtering options
+			let enabledEvents: Set<string> | undefined;
+			let excludedEvents: Set<string> | undefined;
+			let eventPatterns: RegExp[] | undefined;
+
+			if (providerConfig.events && providerConfig.events.length > 0) {
+				// Whitelist specific events
+				enabledEvents = new Set(providerConfig.events);
+			} else if (
+				providerConfig.eventPatterns &&
+				providerConfig.eventPatterns.length > 0
+			) {
+				// Compile glob patterns into regex
+				eventPatterns = providerConfig.eventPatterns.map((pattern) => {
+					// Convert glob pattern to regex: * -> .*
+					const regexPattern = pattern.replace(/\*/g, ".*");
+					return new RegExp(`^${regexPattern}$`);
+				});
+			} else if (
+				providerConfig.excludeEvents &&
+				providerConfig.excludeEvents.length > 0
+			) {
+				// Blacklist specific events
+				excludedEvents = new Set(providerConfig.excludeEvents);
+			}
+
 			return {
 				provider: providerConfig.provider,
 				enabledMethods,
+				enabledEvents,
+				excludedEvents,
+				eventPatterns,
 			};
 		});
 	}
@@ -144,6 +196,40 @@ export class BrowserAnalytics<
 		method: ProviderMethod,
 	): boolean {
 		return config.enabledMethods.has(method);
+	}
+
+	/**
+	 * Checks if an event should be tracked on a provider based on event filtering configuration
+	 */
+	private shouldTrackEvent(
+		config: NormalizedProviderConfig,
+		eventName: string,
+	): boolean {
+		// If no event filtering is configured, allow all events
+		if (
+			!config.enabledEvents &&
+			!config.excludedEvents &&
+			!config.eventPatterns
+		) {
+			return true;
+		}
+
+		// If whitelist is specified, only allow events in the set
+		if (config.enabledEvents) {
+			return config.enabledEvents.has(eventName);
+		}
+
+		// If patterns are specified, check if event matches any pattern
+		if (config.eventPatterns) {
+			return config.eventPatterns.some((pattern) => pattern.test(eventName));
+		}
+
+		// If blacklist is specified, allow all events except those in the set
+		if (config.excludedEvents) {
+			return !config.excludedEvents.has(eventName);
+		}
+
+		return true;
 	}
 
 	/**
@@ -410,9 +496,13 @@ export class BrowserAnalytics<
 					: undefined,
 		};
 
-		// Track with all providers in parallel (respecting routing)
+		// Track with all providers in parallel (respecting method and event routing)
 		const trackPromises = this.providerConfigs
-			.filter((config) => this.shouldCallMethod(config, "track"))
+			.filter(
+				(config) =>
+					this.shouldCallMethod(config, "track") &&
+					this.shouldTrackEvent(config, eventName),
+			)
 			.map(async (config) => {
 				try {
 					await config.provider.track(event, contextWithUser);

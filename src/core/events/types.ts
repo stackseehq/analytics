@@ -111,8 +111,9 @@ export type ProviderMethod =
 	| "reset";
 
 /**
- * Configuration for selective provider method routing.
- * Allows you to control which methods are called on a specific provider.
+ * Configuration for selective provider method routing and event filtering.
+ * Allows you to control which methods are called on a specific provider
+ * and which events are tracked.
  *
  * @example
  * ```typescript
@@ -129,6 +130,33 @@ export type ProviderMethod =
  * {
  *   provider: new GoogleAnalyticsProvider({...}),
  *   exclude: ['pageView']
+ * }
+ * ```
+ *
+ * @example
+ * ```typescript
+ * // Only track specific events (solves 1-to-50 problem)
+ * {
+ *   provider: new EmitKitServerProvider({...}),
+ *   events: ['newsletter_signup', 'user_registered']
+ * }
+ * ```
+ *
+ * @example
+ * ```typescript
+ * // Track all events except specific ones
+ * {
+ *   provider: new PostHogServerProvider({...}),
+ *   excludeEvents: ['newsletter_signup']
+ * }
+ * ```
+ *
+ * @example
+ * ```typescript
+ * // Use glob patterns to match multiple events
+ * {
+ *   provider: new EmitKitServerProvider({...}),
+ *   eventPatterns: ['newsletter_*', 'user_*']
  * }
  * ```
  */
@@ -149,6 +177,49 @@ export interface ProviderConfig {
 	 * Mutually exclusive with `methods`.
 	 */
 	exclude?: ProviderMethod[];
+	/**
+	 * Only track these specific event names on this provider.
+	 * If specified, all other events will be skipped.
+	 * Mutually exclusive with `excludeEvents`.
+	 *
+	 * @example
+	 * ```typescript
+	 * {
+	 *   provider: new EmitKitServerProvider({...}),
+	 *   events: ['newsletter_signup'] // Only this event goes to EmitKit
+	 * }
+	 * ```
+	 */
+	events?: string[];
+	/**
+	 * Skip these specific event names on this provider.
+	 * All other events will be tracked normally.
+	 * Mutually exclusive with `events` and `eventPatterns`.
+	 *
+	 * @example
+	 * ```typescript
+	 * {
+	 *   provider: new BentoClientProvider({...}),
+	 *   excludeEvents: ['page_view'] // Everything except page views
+	 * }
+	 * ```
+	 */
+	excludeEvents?: string[];
+	/**
+	 * Glob-style patterns to match event names.
+	 * Supports wildcards (*) for flexible event routing.
+	 * Mutually exclusive with `excludeEvents`.
+	 *
+	 * @example
+	 * ```typescript
+	 * {
+	 *   provider: new EmitKitServerProvider({...}),
+	 *   eventPatterns: ['newsletter_*', 'user_registered']
+	 *   // Matches: newsletter_signup, newsletter_unsubscribe, user_registered
+	 * }
+	 * ```
+	 */
+	eventPatterns?: string[];
 }
 
 /**

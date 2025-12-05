@@ -1,7 +1,7 @@
 import { BrowserAnalytics } from "@/adapters/client/browser-analytics.js";
 import type {
 	AnalyticsConfig,
-	AnalyticsProvider,
+	ProviderConfigOrProvider,
 } from "@/core/events/types.js";
 import type { EventMapFromCollection } from "@/core/events/index.js";
 
@@ -11,7 +11,7 @@ let analyticsInstance: BrowserAnalytics<
 > | null = null;
 
 export interface ClientAnalyticsConfig {
-	providers?: AnalyticsProvider[];
+	providers?: ProviderConfigOrProvider[];
 	debug?: boolean;
 	enabled?: boolean;
 }
