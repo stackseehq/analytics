@@ -143,6 +143,13 @@ export function reset(): void {
 }
 
 /**
+ * Convenience function to flush queued events
+ */
+export function flush(useBeacon = false): Promise<void> {
+	return getAnalytics().flush(useBeacon);
+}
+
+/**
  * Reset the analytics instance (for testing purposes)
  * @internal
  */

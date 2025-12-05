@@ -19,6 +19,7 @@ export class MockAnalyticsProvider extends BaseAnalyticsProvider {
 			context?: EventContext;
 		}>;
 		reset: number;
+		flush: Array<{ useBeacon?: boolean }>;
 	} = {
 		initialize: 0,
 		identify: [],
@@ -26,6 +27,7 @@ export class MockAnalyticsProvider extends BaseAnalyticsProvider {
 		pageView: [],
 		pageLeave: [],
 		reset: 0,
+		flush: [],
 	};
 
 	initialize(): void {
@@ -67,6 +69,12 @@ export class MockAnalyticsProvider extends BaseAnalyticsProvider {
 		this.log("Reset");
 	}
 
+	flush(useBeacon?: boolean): void {
+		if (!this.isEnabled() || !this.initialized) return;
+		this.calls.flush.push({ useBeacon });
+		this.log("Flushed", { useBeacon });
+	}
+
 	// Helper method to clear all calls
 	clearCalls(): void {
 		this.calls = {
@@ -76,6 +84,7 @@ export class MockAnalyticsProvider extends BaseAnalyticsProvider {
 			pageView: [],
 			pageLeave: [],
 			reset: 0,
+			flush: [],
 		};
 	}
 

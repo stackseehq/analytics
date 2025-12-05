@@ -649,6 +649,59 @@ export class BrowserAnalytics<
 	}
 
 	/**
+	 * Manually flush all queued events to providers.
+	 *
+	 * This method is useful when you need to ensure events are sent immediately,
+	 * such as before navigation or critical user actions. Providers that support
+	 * batching (like ProxyProvider) will flush their queues when this is called.
+	 *
+	 * If `useBeacon` is true, providers that support it will use the Beacon API
+	 * for more reliable delivery during page unload.
+	 *
+	 * @param useBeacon Whether to use the Beacon API for flushing (default: false)
+	 * @returns Promise that resolves when all providers have flushed
+	 *
+	 * @example
+	 * ```typescript
+	 * // Flush before navigation
+	 * analytics.track('button_clicked', { buttonId: 'checkout' });
+	 * await analytics.flush();
+	 * window.location.href = '/checkout';
+	 * ```
+	 *
+	 * @example
+	 * ```typescript
+	 * // Flush with beacon API before page unload
+	 * await analytics.flush(true);
+	 * ```
+	 *
+	 * @example
+	 * ```typescript
+	 * // Ensure critical events are sent immediately
+	 * await analytics.track('purchase_completed', { orderId: '123' });
+	 * await analytics.flush(); // Wait for confirmation
+	 * showThankYouPage();
+	 * ```
+	 */
+	async flush(useBeacon = false): Promise<void> {
+		const flushPromises = this.providerConfigs.map(async (config) => {
+			// Only call flush if the provider has the method
+			if (config.provider.flush && typeof config.provider.flush === "function") {
+				try {
+					await config.provider.flush(useBeacon);
+				} catch (error) {
+					console.error(
+						`[Analytics] Provider ${config.provider.name} failed to flush:`,
+						error,
+					);
+				}
+			}
+		});
+
+		await Promise.all(flushPromises);
+	}
+
+	/**
 	 * Updates the analytics context with new information.
 	 *
 	 * The context is included with all tracked events and provides additional

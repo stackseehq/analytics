@@ -96,6 +96,7 @@ export interface AnalyticsProvider {
 		context?: EventContext,
 	): Promise<void> | void;
 	reset(): Promise<void> | void;
+	flush?(useBeacon?: boolean): Promise<void> | void;
 }
 
 /**

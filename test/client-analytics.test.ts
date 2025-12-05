@@ -322,4 +322,28 @@ describe("Client Analytics", () => {
 		const analyticsInstance = getAnalytics();
 		expect(analyticsInstance).toBe(analytics);
 	});
+
+	it("should flush all providers", async () => {
+		// Track some events
+		await analytics.track("test_event", { data: "test" });
+
+		// Flush
+		await analytics.flush();
+
+		// Should have called flush on the provider
+		expect(mockProvider.calls.flush).toHaveLength(1);
+		expect(mockProvider.calls.flush[0].useBeacon).toBe(false);
+	});
+
+	it("should flush with beacon API", async () => {
+		// Track some events
+		await analytics.track("test_event", { data: "test" });
+
+		// Flush with beacon
+		await analytics.flush(true);
+
+		// Should have called flush with beacon flag
+		expect(mockProvider.calls.flush).toHaveLength(1);
+		expect(mockProvider.calls.flush[0].useBeacon).toBe(true);
+	});
 });
