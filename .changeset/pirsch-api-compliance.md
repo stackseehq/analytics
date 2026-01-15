@@ -1,5 +1,5 @@
 ---
-"stacksee-analytics": patch
+"@stacksee/analytics": patch
 ---
 
 Fix Pirsch server provider for full API compliance
