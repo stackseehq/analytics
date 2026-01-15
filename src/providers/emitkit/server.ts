@@ -12,6 +12,12 @@ export interface EmitKitServerConfig {
 	apiKey: string;
 
 	/**
+	 * Request timeout in milliseconds
+	 * @default 5000
+	 */
+	timeout?: number;
+
+	/**
 	 * Default channel name for events
 	 * @default 'general'
 	 */
@@ -93,7 +99,9 @@ export class EmitKitServerProvider extends BaseAnalyticsProvider {
 			// Dynamically import the EmitKit SDK
 			const { EmitKit } = await import("@emitkit/js");
 
-			this.client = new EmitKit(this.config.apiKey);
+			this.client = new EmitKit(this.config.apiKey, {
+				...(this.config.timeout && { timeout: this.config.timeout }),
+			});
 
 			this.initialized = true;
 			this.log("Initialized successfully");

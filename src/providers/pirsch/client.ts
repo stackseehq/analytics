@@ -28,6 +28,11 @@ export interface PirschClientConfig {
 	 */
 	hostname?: string;
 	/**
+	 * Request timeout in milliseconds
+	 * @default 5000
+	 */
+	timeout?: number;
+	/**
 	 * Enable debug logging
 	 */
 	debug?: boolean;
@@ -73,6 +78,7 @@ export class PirschClientProvider extends BaseAnalyticsProvider {
 			this.client = new Pirsch({
 				identificationCode: this.config.identificationCode,
 				...(this.config.hostname && { hostname: this.config.hostname }),
+				...(this.config.timeout && { timeout: this.config.timeout }),
 			});
 
 			this.initialized = true;
