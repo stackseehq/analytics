@@ -1,5 +1,17 @@
 # @stacksee/analytics
 
+## 0.13.1
+
+### Patch Changes
+
+- Fix Pirsch server provider for full API compliance ([`95628d8`](https://github.com/stackseehq/analytics/commit/95628d80448fb698854946506054c7bbb21785fc))
+
+  - Fix `event_meta` to use string values only (API requirement)
+  - Remove invalid fallback URLs in `buildHit()`
+  - Add `disableBotFilter` config option
+  - Add `non_interactive` event support
+  - Mark synthetic events (`identify`, `reset`) as non-interactive
+
 ## 0.13.0
 
 ### Minor Changes
