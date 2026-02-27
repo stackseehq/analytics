@@ -146,17 +146,17 @@ export function ProductDemo() {
 						<h2 className="text-lg font-bold">{PRODUCT.name}</h2>
 						<div className="flex items-center gap-2 mt-1">
 							<div className="flex items-center gap-0.5">
-								{Array.from({ length: 5 }).map((_, i) => (
-									<Star
-										key={i}
-										className={cn(
-											"h-3 w-3",
-											i < Math.floor(PRODUCT.rating)
-												? "fill-primary text-primary"
-												: "text-muted",
-										)}
-									/>
-								))}
+								{[0, 1, 2, 3, 4].map((i) => (
+								<Star
+									key={i}
+									className={cn(
+										"h-3 w-3",
+										i < Math.floor(PRODUCT.rating)
+											? "fill-primary text-primary"
+											: "text-muted",
+									)}
+								/>
+							))}
 							</div>
 							<span className="text-xs text-muted-foreground">
 								{PRODUCT.rating} ({PRODUCT.reviews})
@@ -177,9 +177,9 @@ export function ProductDemo() {
 
 					{/* Color Selection */}
 					<div className="space-y-1.5">
-						<label className="text-xs font-medium">Color</label>
+						<label htmlFor="color-select" className="text-xs font-medium">Color</label>
 						<Select value={selectedColor} onValueChange={handleColorChange}>
-							<SelectTrigger>
+							<SelectTrigger id="color-select">
 								<SelectValue />
 							</SelectTrigger>
 							<SelectContent>
@@ -194,7 +194,7 @@ export function ProductDemo() {
 
 					{/* Quantity */}
 					<div className="space-y-1.5">
-						<label className="text-xs font-medium">Quantity</label>
+						<label htmlFor="quantity-input" className="text-xs font-medium">Quantity</label>
 						<div className="flex items-center gap-2">
 							<Button
 								size="sm"
@@ -206,6 +206,7 @@ export function ProductDemo() {
 								<Minus className="h-3 w-3" />
 							</Button>
 							<Input
+								id="quantity-input"
 								type="number"
 								value={quantity}
 								readOnly

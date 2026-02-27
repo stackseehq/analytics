@@ -118,16 +118,15 @@ function Carousel({
 				canScrollNext,
 			}}
 		>
-			<div
+			<section
 				onKeyDownCapture={handleKeyDown}
 				className={cn("relative", className)}
-				role="region"
 				aria-roledescription="carousel"
 				data-slot="carousel"
 				{...props}
 			>
 				{children}
-			</div>
+			</section>
 		</CarouselContext.Provider>
 	);
 }
@@ -141,7 +140,7 @@ function CarouselContent({ className, ...props }: React.ComponentProps<"div">) {
 			className="overflow-hidden"
 			data-slot="carousel-content"
 		>
-			<div
+			<section
 				className={cn(
 					"flex",
 					orientation === "horizontal" ? "-ml-4" : "-mt-4 flex-col",

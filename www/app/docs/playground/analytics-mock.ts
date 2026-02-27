@@ -34,7 +34,7 @@ class MockAnalytics {
 
 		// Simulate slight delay for realism
 		setTimeout(() => {
-			this.listeners.forEach((listener) => listener(event));
+			for (const listener of this.listeners) listener(event);
 		}, 50);
 	}
 

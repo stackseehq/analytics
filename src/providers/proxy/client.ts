@@ -255,7 +255,6 @@ export class ProxyProvider extends BaseAnalyticsProvider {
 			device: {
 				...context?.device,
 				// Additional fields for proxy (cast to any to bypass strict typing)
-				// biome-ignore lint/suspicious/noExplicitAny: Extended device context fields not in base type
 				...(({
 					userAgent: navigator.userAgent,
 					language: navigator.language,
@@ -268,6 +267,7 @@ export class ProxyProvider extends BaseAnalyticsProvider {
 						width: window.innerWidth,
 						height: window.innerHeight,
 					},
+				// biome-ignore lint/suspicious/noExplicitAny: Extended device context fields not in base type
 				}) as any),
 			},
 		};
