@@ -1,5 +1,12 @@
 # @stacksee/docs
 
+## 0.0.11
+
+### Patch Changes
+
+- Updated dependencies [[`3910b5a`](https://github.com/stackseehq/analytics/commit/3910b5ac8aa4b0c5fdbe76fb23b6153b742fe95f)]:
+  - @stacksee/analytics@0.13.2
+
 ## 0.0.10
 
 ### Patch Changes
