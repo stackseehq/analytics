@@ -111,7 +111,7 @@ export async function ingestProxyEvents<
 					}
 
 					case "identify": {
-						analytics.identify(event.userId, event.traits);
+						await analytics.identify(event.userId, event.traits);
 						break;
 					}
 
@@ -134,7 +134,7 @@ export async function ingestProxyEvents<
 							},
 						} as EventContext<TUserTraits>;
 
-						analytics.pageView(event.properties, {
+						await analytics.pageView(event.properties, {
 							context: enrichedContext,
 						});
 						break;

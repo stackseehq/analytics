@@ -328,7 +328,7 @@ export class PirschServerProvider extends BaseAnalyticsProvider {
 		};
 	}
 
-	identify(userId: string, traits?: Record<string, unknown>): void {
+	async identify(userId: string, traits?: Record<string, unknown>): Promise<void> {
 		if (!this.isEnabled() || !this.initialized) return;
 
 		// Pirsch doesn't have a native identify method
@@ -355,11 +355,12 @@ export class PirschServerProvider extends BaseAnalyticsProvider {
 			non_interactive: true, // Synthetic event shouldn't affect bounce rate
 		};
 
-		this.request("/api/v1/event", event).catch((error) => {
+		try {
+			await this.request("/api/v1/event", event);
+			this.log("Identified user via event", { userId, traits });
+		} catch (error) {
 			console.error("[Pirsch-Server] Failed to track identify event:", error);
-		});
-
-		this.log("Identified user via event", { userId, traits });
+		}
 	}
 
 	async track(event: BaseEvent, context?: EventContext): Promise<void> {
@@ -404,7 +405,7 @@ export class PirschServerProvider extends BaseAnalyticsProvider {
 		}
 	}
 
-	pageView(properties?: Record<string, unknown>, context?: EventContext): void {
+	async pageView(properties?: Record<string, unknown>, context?: EventContext): Promise<void> {
 		if (!this.isEnabled() || !this.initialized) return;
 
 		const hit = this.buildHit(context);
@@ -418,11 +419,12 @@ export class PirschServerProvider extends BaseAnalyticsProvider {
 			hit.tags = this.filterScalars(properties);
 		}
 
-		this.request("/api/v1/hit", hit).catch((error) => {
+		try {
+			await this.request("/api/v1/hit", hit);
+			this.log("Tracked page view", { path: context?.page?.path });
+		} catch (error) {
 			console.error("[Pirsch-Server] Failed to track page view:", error);
-		});
-
-		this.log("Tracked page view", { path: context?.page?.path });
+		}
 	}
 
 	async reset(): Promise<void> {

@@ -114,7 +114,7 @@ export class EmitKitServerProvider extends BaseAnalyticsProvider {
 		}
 	}
 
-	identify(userId: string, traits?: Record<string, unknown>): void {
+	async identify(userId: string, traits?: Record<string, unknown>): Promise<void> {
 		if (!this.isEnabled() || !this.initialized || !this.client) return;
 
 		// Store for later use in track calls
@@ -144,36 +144,30 @@ export class EmitKitServerProvider extends BaseAnalyticsProvider {
 			aliases.push(traits.username);
 		}
 
-		// Call EmitKit's identify method
-		this.client
-			.identify({
+		try {
+			const result = await this.client.identify({
 				user_id: userId,
 				properties: traits || {},
 				aliases: aliases.length > 0 ? aliases : undefined,
-			})
-			.then((result) => {
-				this.log("Identified user", {
-					userId,
-					email,
-					identityId: result.data.id,
-					aliasesCreated: result.data.aliases?.created?.length || 0,
-					aliasesFailed: result.data.aliases?.failed?.length || 0,
-				});
-
-				// Log any alias failures
-				if (
-					result.data.aliases?.failed &&
-					result.data.aliases.failed.length > 0
-				) {
-					console.warn(
-						"[EmitKit-Server] Some aliases failed to create:",
-						result.data.aliases.failed,
-					);
-				}
-			})
-			.catch((error) => {
-				console.error("[EmitKit-Server] Failed to identify user:", error);
 			});
+
+			this.log("Identified user", {
+				userId,
+				email,
+				identityId: result.data.id,
+				aliasesCreated: result.data.aliases?.created?.length || 0,
+				aliasesFailed: result.data.aliases?.failed?.length || 0,
+			});
+
+			if (result.data.aliases?.failed && result.data.aliases.failed.length > 0) {
+				console.warn(
+					"[EmitKit-Server] Some aliases failed to create:",
+					result.data.aliases.failed,
+				);
+			}
+		} catch (error) {
+			console.error("[EmitKit-Server] Failed to identify user:", error);
+		}
 	}
 
 	async track(event: BaseEvent, context?: EventContext): Promise<void> {
@@ -259,7 +253,7 @@ export class EmitKitServerProvider extends BaseAnalyticsProvider {
 		}
 	}
 
-	pageView(properties?: Record<string, unknown>, context?: EventContext): void {
+	async pageView(properties?: Record<string, unknown>, context?: EventContext): Promise<void> {
 		if (!this.isEnabled() || !this.initialized || !this.client) return;
 
 		// Determine userId
@@ -303,9 +297,8 @@ export class EmitKitServerProvider extends BaseAnalyticsProvider {
 		// Determine channel name using resolution logic
 		const channelName = this.resolveChannelName(syntheticEvent);
 
-		// Create page view event
-		this.client.events
-			.create({
+		try {
+			const result = await this.client.events.create({
 				channelName,
 				title: "Page View",
 				description: context?.page?.path || "User viewed a page",
@@ -316,18 +309,17 @@ export class EmitKitServerProvider extends BaseAnalyticsProvider {
 				notify: false, // Don't notify for page views by default
 				displayAs: "message",
 				source: "stacksee-analytics",
-			})
-			.then((result) => {
-				this.log("Tracked page view", {
-					eventId: result.data.id,
-					path: context?.page?.path,
-					userId,
-					channelName,
-				});
-			})
-			.catch((error) => {
-				console.error("[EmitKit-Server] Failed to track page view:", error);
 			});
+
+			this.log("Tracked page view", {
+				eventId: result.data.id,
+				path: context?.page?.path,
+				userId,
+				channelName,
+			});
+		} catch (error) {
+			console.error("[EmitKit-Server] Failed to track page view:", error);
+		}
 	}
 
 	async reset(): Promise<void> {

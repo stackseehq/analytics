@@ -102,7 +102,7 @@ export class BentoServerProvider extends BaseAnalyticsProvider {
 		}
 	}
 
-	identify(userId: string, traits?: Record<string, unknown>): void {
+	async identify(userId: string, traits?: Record<string, unknown>): Promise<void> {
 		if (!this.isEnabled() || !this.initialized || !this.client) return;
 
 		// Extract email from userId or traits
@@ -123,14 +123,12 @@ export class BentoServerProvider extends BaseAnalyticsProvider {
 		const fields = traits ? { ...traits } : {};
 		fields.email = undefined; // Remove email from fields since it's passed separately
 
-		this.client.V1.addSubscriber({
-			email,
-			fields,
-		}).catch((error) => {
+		try {
+			await this.client.V1.addSubscriber({ email, fields });
+			this.log("Identified user", { userId, email, traits });
+		} catch (error) {
 			console.error("[Bento-Server] Failed to identify user:", error);
-		});
-
-		this.log("Identified user", { userId, email, traits });
+		}
 	}
 
 	async track(event: BaseEvent, context?: EventContext): Promise<void> {
@@ -195,7 +193,7 @@ export class BentoServerProvider extends BaseAnalyticsProvider {
 		}
 	}
 
-	pageView(properties?: Record<string, unknown>, context?: EventContext): void {
+	async pageView(properties?: Record<string, unknown>, context?: EventContext): Promise<void> {
 		if (!this.isEnabled() || !this.initialized || !this.client) return;
 
 		// Get email from context or current user
@@ -234,16 +232,12 @@ export class BentoServerProvider extends BaseAnalyticsProvider {
 
 		const fields = context?.user?.traits || {};
 
-		this.client.V1.track({
-			email,
-			type: "$view",
-			details,
-			fields,
-		}).catch((error) => {
+		try {
+			await this.client.V1.track({ email, type: "$view", details, fields });
+			this.log("Tracked page view", { properties, context });
+		} catch (error) {
 			console.error("[Bento-Server] Failed to track page view:", error);
-		});
-
-		this.log("Tracked page view", { properties, context });
+		}
 	}
 
 	async reset(): Promise<void> {

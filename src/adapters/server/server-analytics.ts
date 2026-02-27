@@ -315,10 +315,16 @@ export class ServerAnalytics<
 	 * }
 	 * ```
 	 */
-	identify(userId: string, traits?: Record<string, unknown>): void {
-		for (const config of this.providerConfigs) {
-			if (this.shouldCallMethod(config, "identify")) {
-				config.provider.identify(userId, traits);
+	async identify(userId: string, traits?: Record<string, unknown>): Promise<void> {
+		const promises = this.providerConfigs
+			.filter((config) => this.shouldCallMethod(config, "identify"))
+			.map((config) => config.provider.identify(userId, traits));
+
+		const results = await Promise.allSettled(promises);
+
+		for (const result of results) {
+			if (result.status === "rejected") {
+				throw result.reason;
 			}
 		}
 	}
@@ -559,12 +565,12 @@ export class ServerAnalytics<
 	 * }
 	 * ```
 	 */
-	pageView(
+	async pageView(
 		properties?: Record<string, unknown>,
 		options?: {
 			context?: EventContext<TUserTraits>;
 		},
-	): void {
+	): Promise<void> {
 		if (!this.initialized) return;
 
 		const context: EventContext<TUserTraits> = {
@@ -572,9 +578,15 @@ export class ServerAnalytics<
 			...options?.context,
 		} as EventContext<TUserTraits>;
 
-		for (const config of this.providerConfigs) {
-			if (this.shouldCallMethod(config, "pageView")) {
-				config.provider.pageView(properties, context);
+		const promises = this.providerConfigs
+			.filter((config) => this.shouldCallMethod(config, "pageView"))
+			.map((config) => config.provider.pageView(properties, context));
+
+		const results = await Promise.allSettled(promises);
+
+		for (const result of results) {
+			if (result.status === "rejected") {
+				throw result.reason;
 			}
 		}
 	}
