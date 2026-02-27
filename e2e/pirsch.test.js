@@ -67,7 +67,7 @@ async function waitForPirschCall(maxWaitMs = 20000) {
     if (status && status.calls !== undefined) {
       pass('Status endpoint returns expected shape');
     } else {
-      fail('Status endpoint', 'Unexpected shape: ' + JSON.stringify(status));
+      fail('Status endpoint', `Unexpected shape: ${JSON.stringify(status)}`);
     }
   } catch (e) {
     fail('Status endpoint', e.message);
@@ -277,9 +277,9 @@ async function waitForPirschCall(maxWaitMs = 20000) {
 
   if (results.failed > 0) {
     console.log('\nFailed tests:');
-    results.tests
-      .filter(t => !t.passed)
-      .forEach(t => console.log(`  FAIL ${t.name}: ${t.reason}`));
+    for (const t of results.tests.filter(t => !t.passed)) {
+      console.log(`  FAIL ${t.name}: ${t.reason}`);
+    }
     process.exit(1);
   } else {
     console.log('\nAll tests passed!');

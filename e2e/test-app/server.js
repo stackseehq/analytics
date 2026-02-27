@@ -22,7 +22,7 @@ let lastCallStatus = { success: null, error: null, calls: [] };
 
 // Override fetch to intercept Pirsch API calls
 const originalFetch = globalThis.fetch;
-globalThis.fetch = async function (url, options) {
+globalThis.fetch = async (url, options) => {
   if (typeof url === "string" && url.includes("api.pirsch.io")) {
     const start = Date.now();
     try {
