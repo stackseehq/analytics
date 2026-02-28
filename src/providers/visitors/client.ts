@@ -26,6 +26,12 @@ export interface VisitorsClientConfig {
 	 * Enable/disable the provider
 	 */
 	enabled?: boolean;
+	/**
+	 * Enable persist mode. Sets the `data-persist` attribute on the Visitors
+	 * script tag so the visitor cookie is written, enabling cross-session
+	 * tracking and Stripe revenue attribution via `getVisitorId()`.
+	 */
+	persist?: boolean;
 }
 
 declare global {
@@ -89,6 +95,9 @@ export class VisitorsClientProvider extends BaseAnalyticsProvider {
 			const script = document.createElement("script");
 			script.src = "https://cdn.visitors.now/v.js";
 			script.setAttribute("data-token", this.config.token);
+			if (this.config.persist) {
+				script.setAttribute("data-persist", "");
+			}
 			script.async = true;
 			script.defer = true;
 			script.onload = () => {
