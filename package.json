@@ -37,6 +37,8 @@
 		"test:watch": "vitest",
 		"test:e2e": "node e2e/pirsch.test.js",
 		"test:e2e:server": "node e2e/test-app/server.js",
+		"test:e2e:visitors": "node e2e/visitors.test.js",
+		"test:e2e:visitors:server": "node e2e/visitors-test-app/server.js",
 		"build": "vite build",
 		"dev": "pnpm --filter @stacksee/docs dev",
 		"build:docs": "pnpm --filter @stacksee/docs build",

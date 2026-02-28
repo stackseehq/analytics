@@ -6,6 +6,7 @@ describe("@stacksee/analytics/providers exports", () => {
 	it("should export only client-safe providers from client entry", () => {
 		expect(ClientProviders.BaseAnalyticsProvider).toBeDefined();
 		expect(ClientProviders.PostHogClientProvider).toBeDefined();
+		expect(ClientProviders.VisitorsClientProvider).toBeDefined();
 		expect(
 			(ClientProviders as Record<string, unknown>).PostHogServerProvider,
 		).toBeUndefined();

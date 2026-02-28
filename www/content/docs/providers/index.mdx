@@ -20,6 +20,9 @@ Providers are plugins that send your events to analytics services. @stacksee/ana
   <Card title="EmitKit" href="/docs/providers/emitkit" icon="bell">
     Event notifications and activity feeds with rich metadata
   </Card>
+  <Card title="Visitors" href="/docs/providers/visitors" icon="eye">
+    Lightweight analytics with Stripe revenue attribution
+  </Card>
   <Card title="Proxy Provider" href="/docs/providers/proxy" icon="arrow-right-left">
     Route events through your server to bypass ad-blockers
   </Card>
@@ -94,6 +97,22 @@ new EmitKitServerProvider({
 ```
 
 [Full EmitKit Documentation →](/docs/providers/emitkit)
+
+### Visitors
+
+```bash
+# No installation needed (script loaded from CDN at runtime)
+```
+
+```typescript
+import { VisitorsClientProvider } from '@stacksee/analytics/providers/client';
+
+new VisitorsClientProvider({
+  token: process.env.NEXT_PUBLIC_VISITORS_TOKEN!
+})
+```
+
+[Full Visitors Documentation →](/docs/providers/visitors)
 
 ## Using Multiple Providers
 
@@ -247,6 +266,9 @@ export class CustomProvider extends BaseAnalyticsProvider {
   </Card>
   <Card title="EmitKit Provider" href="/docs/providers/emitkit" icon="bell">
     Event notifications and activity feeds
+  </Card>
+  <Card title="Visitors Provider" href="/docs/providers/visitors" icon="eye">
+    Lightweight analytics with Stripe revenue attribution
   </Card>
   <Card title="Custom Providers" href="/docs/providers/custom" icon="code">
     Create your own provider

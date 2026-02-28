@@ -1,0 +1,244 @@
+import type { BaseEvent, EventContext } from "@/core/events/types.js";
+import { BaseAnalyticsProvider } from "@/providers/base.provider.js";
+import { isBrowser } from "@/utils/environment.js";
+
+// visitors.now client-side types
+interface VisitorsClient {
+	track(event: string, properties?: Record<string, string | number>): void;
+	identify(traits: {
+		id: string;
+		email?: string;
+		name?: string;
+		[key: string]: string | number | undefined;
+	}): void;
+}
+
+export interface VisitorsClientConfig {
+	/**
+	 * Your Visitors project token from the dashboard
+	 */
+	token: string;
+	/**
+	 * Enable debug logging
+	 */
+	debug?: boolean;
+	/**
+	 * Enable/disable the provider
+	 */
+	enabled?: boolean;
+}
+
+declare global {
+	interface Window {
+		visitors?: VisitorsClient;
+	}
+}
+
+export class VisitorsClientProvider extends BaseAnalyticsProvider {
+	name = "Visitors-Client";
+	private visitors?: VisitorsClient;
+	private initialized = false;
+	private config: VisitorsClientConfig;
+	private scriptLoaded = false;
+
+	constructor(config: VisitorsClientConfig) {
+		super({ debug: config.debug, enabled: config.enabled });
+		this.config = config;
+	}
+
+	async initialize(): Promise<void> {
+		if (!this.isEnabled()) return;
+		if (this.initialized) return;
+
+		if (!isBrowser()) {
+			this.log("Skipping initialization - not in browser environment");
+			return;
+		}
+
+		if (!this.config.token || typeof this.config.token !== "string") {
+			throw new Error("Visitors requires a token");
+		}
+
+		try {
+			if (!this.scriptLoaded) {
+				await this.loadScript();
+			}
+
+			await this.waitForVisitors();
+
+			this.visitors = window.visitors;
+			this.initialized = true;
+			this.log("Initialized successfully", this.config);
+		} catch (error) {
+			console.error("[Visitors-Client] Failed to initialize:", error);
+			throw error;
+		}
+	}
+
+	private async loadScript(): Promise<void> {
+		return new Promise((resolve, reject) => {
+			const existingScript = document.querySelector(
+				`script[src*="cdn.visitors.now"]`,
+			);
+			if (existingScript) {
+				this.scriptLoaded = true;
+				resolve();
+				return;
+			}
+
+			const script = document.createElement("script");
+			script.src = "https://cdn.visitors.now/v.js";
+			script.setAttribute("data-token", this.config.token);
+			script.async = true;
+			script.defer = true;
+			script.onload = () => {
+				this.scriptLoaded = true;
+				resolve();
+			};
+			script.onerror = () => {
+				reject(new Error("Failed to load Visitors script"));
+			};
+
+			document.head.appendChild(script);
+		});
+	}
+
+	private async waitForVisitors(
+		maxAttempts = 50,
+		interval = 100,
+	): Promise<void> {
+		for (let i = 0; i < maxAttempts; i++) {
+			if (window.visitors) {
+				return;
+			}
+			await new Promise((resolve) => setTimeout(resolve, interval));
+		}
+		throw new Error("Visitors SDK not available after loading script");
+	}
+
+	identify(userId: string, traits?: Record<string, unknown>): void {
+		if (!this.isEnabled() || !this.initialized || !this.visitors) return;
+
+		const payload: {
+			id: string;
+			email?: string;
+			name?: string;
+			[key: string]: string | number | undefined;
+		} = { id: userId };
+
+		if (traits) {
+			for (const [key, value] of Object.entries(traits)) {
+				if (typeof value === "string" || typeof value === "number") {
+					payload[key] = value;
+				}
+			}
+		}
+
+		this.visitors.identify(payload);
+		this.log("Identified user", { userId, traits });
+	}
+
+	track(event: BaseEvent, context?: EventContext): void {
+		if (!this.isEnabled() || !this.initialized || !this.visitors) return;
+
+		const properties: Record<string, string | number> = {};
+
+		if (event.properties) {
+			for (const [key, value] of Object.entries(event.properties)) {
+				if (typeof value === "string" || typeof value === "number") {
+					properties[key] = value;
+				}
+			}
+		}
+
+		if (event.category) {
+			properties.category = event.category;
+		}
+
+		if (context?.page?.path) {
+			properties.page_path = context.page.path;
+		}
+
+		if (context?.page?.title) {
+			properties.page_title = context.page.title;
+		}
+
+		this.visitors.track(event.action, properties);
+		this.log("Tracked event", { event, context });
+	}
+
+	pageView(properties?: Record<string, unknown>, context?: EventContext): void {
+		// visitors.now tracks page views automatically via the script tag.
+		// No explicit call needed, but we can track a custom event if desired.
+		this.log("Page view - handled automatically by Visitors script", {
+			properties,
+			context,
+		});
+	}
+
+	pageLeave(
+		properties?: Record<string, unknown>,
+		context?: EventContext,
+	): void {
+		if (!this.isEnabled() || !this.initialized || !this.visitors || !isBrowser())
+			return;
+
+		const props: Record<string, string | number> = {};
+
+		if (context?.page?.path) {
+			props.page_path = context.page.path;
+		}
+
+		if (properties) {
+			for (const [key, value] of Object.entries(properties)) {
+				if (typeof value === "string" || typeof value === "number") {
+					props[key] = value;
+				}
+			}
+		}
+
+		this.visitors.track("page_leave", props);
+		this.log("Tracked page leave", { properties, context });
+	}
+
+	reset(): void {
+		if (!this.isEnabled() || !this.initialized || !this.visitors || !isBrowser())
+			return;
+
+		// visitors.now doesn't expose a native reset method
+		this.log("Reset user session - Note: Visitors does not have a native reset method");
+	}
+
+	// ============================================================================
+	// Stripe Revenue Attribution
+	// ============================================================================
+
+	/**
+	 * Returns the current visitor ID from the `visitor` cookie set by the
+	 * visitors.now script. Pass this value in your Stripe checkout session
+	 * metadata so revenue is attributed to the correct visitor.
+	 *
+	 * Requires persist mode to be enabled in your visitors.now project settings.
+	 *
+	 * @example Server-side Stripe checkout creation:
+	 * ```typescript
+	 * // Client-side: get visitor ID and send to your server
+	 * const visitorId = visitorsProvider.getVisitorId();
+	 *
+	 * // Server-side: include in Stripe checkout session
+	 * const session = await stripe.checkout.sessions.create({
+	 *   // ...
+	 *   metadata: { visitor: visitorId },
+	 * });
+	 * ```
+	 */
+	getVisitorId(): string | null {
+		if (!isBrowser()) return null;
+
+		const match = document.cookie
+			.split("; ")
+			.find((row) => row.startsWith("visitor="));
+
+		return match ? decodeURIComponent(match.split("=")[1]) : null;
+	}
+}
