@@ -119,6 +119,24 @@ describe("VisitorsClientProvider", () => {
 			expect(scriptLoads).toBe(1);
 		});
 
+		it("should not race – concurrent initialize() calls load script exactly once", async () => {
+			const appendSpy = stubScriptLoading(sdk);
+			const provider = new VisitorsClientProvider({ token: "test-token" });
+
+			// Fire three concurrent initialize() calls without awaiting between them
+			await Promise.all([
+				provider.initialize(),
+				provider.initialize(),
+				provider.initialize(),
+			]);
+
+			const scriptLoads = appendSpy.mock.calls.filter(([n]) =>
+				n instanceof HTMLScriptElement && n.src.includes("visitors.now"),
+			).length;
+
+			expect(scriptLoads).toBe(1);
+		});
+
 		it("should not re-inject script when it is already in the DOM", async () => {
 			// Pre-insert a script tag as if another tool already loaded it
 			const existing = document.createElement("script");
@@ -199,6 +217,31 @@ describe("VisitorsClientProvider", () => {
 			await provider.initialize();
 			provider.identify("user-1");
 			expect(sdk.identify).not.toHaveBeenCalled();
+		});
+
+		it("should deduplicate – second identify() with same userId is a no-op", async () => {
+			stubScriptLoading(sdk);
+			const provider = new VisitorsClientProvider({ token: "t" });
+			await provider.initialize();
+
+			provider.identify("user-abc", { email: "a@b.com" });
+			provider.identify("user-abc", { email: "a@b.com" });
+			provider.identify("user-abc", { email: "a@b.com" });
+
+			expect(sdk.identify).toHaveBeenCalledTimes(1);
+		});
+
+		it("should re-identify when userId changes", async () => {
+			stubScriptLoading(sdk);
+			const provider = new VisitorsClientProvider({ token: "t" });
+			await provider.initialize();
+
+			provider.identify("user-1", { email: "one@example.com" });
+			provider.identify("user-2", { email: "two@example.com" });
+
+			expect(sdk.identify).toHaveBeenCalledTimes(2);
+			expect((sdk.identify.mock.calls[0][0] as { id: string }).id).toBe("user-1");
+			expect((sdk.identify.mock.calls[1][0] as { id: string }).id).toBe("user-2");
 		});
 	});
 

@@ -44,8 +44,17 @@ export class VisitorsClientProvider extends BaseAnalyticsProvider {
 	name = "Visitors-Client";
 	private visitors?: VisitorsClient;
 	private initialized = false;
+	/**
+	 * Shared Promise for any in-flight initialization. Concurrent calls to
+	 * initialize() all await the same Promise, preventing the race condition
+	 * where multiple callers each inject the script and trigger duplicate
+	 * automatic page-view events (→ 429 from visitors.now).
+	 */
+	private initPromise: Promise<void> | null = null;
 	private config: VisitorsClientConfig;
 	private scriptLoaded = false;
+	/** Last user ID passed to identify(), used to deduplicate repeated calls. */
+	private lastIdentifiedUserId: string | null = null;
 
 	constructor(config: VisitorsClientConfig) {
 		super({ debug: config.debug, enabled: config.enabled });
@@ -54,14 +63,25 @@ export class VisitorsClientProvider extends BaseAnalyticsProvider {
 
 	async initialize(): Promise<void> {
 		if (!this.isEnabled()) return;
-		if (this.initialized) return;
+		// Return the existing Promise if initialization is already in-flight or done.
+		// This is the critical fix: a boolean flag is only set AFTER the async work
+		// completes, so concurrent callers all pass the boolean check and each
+		// trigger a separate script load + automatic page-view POST.
+		if (this.initPromise) return this.initPromise;
 
+		this.initPromise = this._doInitialize();
+		return this.initPromise;
+	}
+
+	private async _doInitialize(): Promise<void> {
 		if (!isBrowser()) {
 			this.log("Skipping initialization - not in browser environment");
 			return;
 		}
 
 		if (!this.config.token || typeof this.config.token !== "string") {
+			// Reset so a corrected config can retry
+			this.initPromise = null;
 			throw new Error("Visitors requires a token");
 		}
 
@@ -76,6 +96,8 @@ export class VisitorsClientProvider extends BaseAnalyticsProvider {
 			this.initialized = true;
 			this.log("Initialized successfully", this.config);
 		} catch (error) {
+			// Allow a future retry after transient failures (e.g. network error)
+			this.initPromise = null;
 			console.error("[Visitors-Client] Failed to initialize:", error);
 			throw error;
 		}
@@ -128,6 +150,14 @@ export class VisitorsClientProvider extends BaseAnalyticsProvider {
 	identify(userId: string, traits?: Record<string, unknown>): void {
 		if (!this.isEnabled() || !this.initialized || !this.visitors) return;
 
+		// Deduplicate: skip if the same user ID was already sent in this session.
+		// Without this, calling identify() on every route change (a common pattern
+		// in Next.js layouts) hammers e.visitors.now/e and triggers 429s.
+		if (this.lastIdentifiedUserId === userId) {
+			this.log("Identify skipped — already identified this session", { userId });
+			return;
+		}
+
 		const payload: {
 			id: string;
 			email?: string;
@@ -144,6 +174,7 @@ export class VisitorsClientProvider extends BaseAnalyticsProvider {
 		}
 
 		this.visitors.identify(payload);
+		this.lastIdentifiedUserId = userId;
 		this.log("Identified user", { userId, traits });
 	}
 
