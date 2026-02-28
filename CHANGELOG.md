@@ -1,5 +1,11 @@
 # @stacksee/analytics
 
+## 0.14.1
+
+### Patch Changes
+
+- Add `persist` option to `VisitorsClientProvider`. When `persist: true`, the `data-persist` attribute is set on the injected script tag, enabling the visitor cookie required for cross-session tracking and Stripe revenue attribution via `getVisitorId()`. ([`c4f43ca`](https://github.com/stackseehq/analytics/commit/c4f43caf722e23d2ecf302c59a48f6dfe152bd67))
+
 ## 0.14.0
 
 ### Minor Changes
