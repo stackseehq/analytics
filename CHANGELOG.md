@@ -1,5 +1,16 @@
 # @stacksee/analytics
 
+## 0.14.0
+
+### Minor Changes
+
+- Add `VisitorsClientProvider` for [visitors.now](https://visitors.now) analytics. ([`d3bb7e6`](https://github.com/stackseehq/analytics/commit/d3bb7e615783b982f82c5277c53be2b87a72a1fb))
+
+  - Dynamically loads `cdn.visitors.now/v.js` with your project token — no npm dependency required
+  - Supports `track()`, `identify()`, `pageLeave()` (page views are handled automatically by the script)
+  - `getVisitorId()` helper reads the `visitor` cookie for Stripe revenue attribution
+  - Full E2E test suite (Playwright) and unit tests (vitest/jsdom) included
+
 ## 0.13.2
 
 ### Patch Changes
