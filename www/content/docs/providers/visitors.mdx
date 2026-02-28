@@ -18,7 +18,8 @@ import { VisitorsClientProvider } from '@stacksee/analytics/providers/client';
 const analytics = createClientAnalytics({
   providers: [
     new VisitorsClientProvider({
-      token: process.env.NEXT_PUBLIC_VISITORS_TOKEN!
+      token: process.env.NEXT_PUBLIC_VISITORS_TOKEN!,
+      persist: true // sets data-persist on the script tag
     })
   ]
 });
@@ -31,6 +32,7 @@ await analytics.initialize();
 | Option | Type | Required | Description |
 |--------|------|----------|-------------|
 | `token` | `string` | Yes | Your Visitors project token from the dashboard |
+| `persist` | `boolean` | No | Enable persist mode — sets `data-persist` on the script tag so a `visitor` cookie is written. Required for cross-session tracking and Stripe revenue attribution (default: `false`) |
 | `debug` | `boolean` | No | Enable debug logging (default: `false`) |
 | `enabled` | `boolean` | No | Disable the provider entirely (default: `true`) |
 
@@ -66,7 +68,7 @@ analytics.identify('user-123', {
 Calls `visitors.identify({ id, ...traits })`. Non-scalar trait values are filtered out automatically.
 
 <Callout type="info">
-  Identification requires **persist mode** to be enabled in your Visitors project settings.
+  Identification requires `persist: true` in your `VisitorsClientProvider` config.
   EU users must give explicit consent before calling `identify()`.
 </Callout>
 
@@ -140,7 +142,7 @@ export async function POST(req: Request) {
 
 <Callout type="warn">
   Revenue attribution requires:
-  - **Persist mode** enabled in your Visitors project settings
+  - `persist: true` set in `VisitorsClientProvider` config (adds `data-persist` to the script tag so the `visitor` cookie is written)
   - A **Stripe API key** connected under Settings → Integrations
   - `visitors.identify()` called when users sign in (for email-based fallback)
 </Callout>
@@ -156,6 +158,7 @@ import { VisitorsClientProvider } from '@stacksee/analytics/providers/client';
 
 export const visitorsProvider = new VisitorsClientProvider({
   token: process.env.NEXT_PUBLIC_VISITORS_TOKEN!,
+  persist: true,
   debug: process.env.NODE_ENV === 'development'
 });
 
@@ -200,8 +203,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
 ## Privacy Features
 
-- No cookies by default (cookie-free mode available)
-- GDPR-compliant — `identify()` requires explicit EU consent when using persist mode
+- No cookies by default — opt in via `persist: true`
+- GDPR-compliant — `identify()` requires explicit EU consent when persist mode is enabled
 - Bot filtering built-in
 
 ## Resources
