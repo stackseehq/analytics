@@ -1,5 +1,15 @@
 # @stacksee/analytics
 
+## 0.14.3
+
+### Patch Changes
+
+- fix(pirsch): externalize pirsch-sdk from library build ([`3d9938f`](https://github.com/stackseehq/analytics/commit/3d9938f49907f4d54da6a9b8bedaacd9d61dddb2))
+
+  `pirsch-sdk` was not listed in `rollupOptions.external`, causing Vite to bundle it into an internal chunk (`web-D-ZwlgeQ.js`) and load it via a relative dynamic import. When consumers re-bundled the library (e.g. with Vite/Astro), the relative path broke and `PirschClientProvider.initialize()` failed with `Cannot destructure property 'Pirsch' of undefined`.
+
+  `pirsch-sdk` and `pirsch-sdk/web` are now externalized so the consumer's bundler resolves them directly.
+
 ## 0.14.2
 
 ### Patch Changes
