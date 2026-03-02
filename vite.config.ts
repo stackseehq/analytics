@@ -18,7 +18,7 @@ export default defineConfig(({ mode }) => {
 				formats: ["es"],
 			},
 			rollupOptions: {
-				external: ["posthog-node", "posthog-js", "pirsch-sdk", "pirsch-sdk/web"],
+				external: ["posthog-node", "posthog-js"],
 			},
 			ssr: false,
 		},

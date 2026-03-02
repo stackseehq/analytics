@@ -83,7 +83,6 @@
 	"optionalDependencies": {
 		"@bentonow/bento-node-sdk": "^0.2.1",
 		"@emitkit/js": "^2.1.0",
-		"pirsch-sdk": "^2.9.1",
 		"posthog-js": "^1.268.2",
 		"posthog-node": "^5.9.0"
 	},
