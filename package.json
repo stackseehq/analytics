@@ -1,6 +1,6 @@
 {
 	"name": "@stacksee/analytics",
-	"version": "0.14.2",
+	"version": "0.14.3",
 	"description": "A highly typed, provider-agnostic analytics library for TypeScript applications",
 	"type": "module",
 	"exports": {
