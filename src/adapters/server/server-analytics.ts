@@ -366,9 +366,14 @@ export class ServerAnalytics<
 		if (!this.enabled || this.initialized) return Promise.resolve();
 		if (this.initializePromise) return this.initializePromise;
 
-		this.initializePromise = Promise.all(
-			this.providerConfigs.map(({ provider }) => provider.initialize()),
-		)
+		const initializationPromises = this.providerConfigs.map(({ provider }) => {
+			try {
+				return Promise.resolve(provider.initialize());
+			} catch (error) {
+				return Promise.reject(error);
+			}
+		});
+		this.initializePromise = Promise.all(initializationPromises)
 			.then(() => {
 				this.initialized = true;
 			})

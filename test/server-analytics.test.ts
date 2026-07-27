@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 import { z } from "zod";
-import type { ServerAnalytics } from "@/adapters/server/server-analytics";
+import { ServerAnalytics } from "@/adapters/server/server-analytics";
 import {
 	type AnalyticsValidationError,
 	defineEvents,
@@ -196,6 +196,57 @@ describe("Server Analytics", () => {
 		provider.resolveInitialize();
 		await initialization;
 		expect(provider.calls.initialize).toBe(1);
+	});
+
+	it("turns a synchronous provider initialization throw into a rejection", async () => {
+		const provider = new MockAnalyticsProvider({ enabled: true });
+		const initializationError = new Error("synchronous initialization failed");
+		provider.initialize = () => {
+			provider.calls.initialize++;
+			throw initializationError;
+		};
+		const direct = new ServerAnalytics({
+			events,
+			providers: [provider],
+		});
+		let initialization!: Promise<void>;
+
+		expect(() => {
+			initialization = direct.initialize();
+		}).not.toThrow();
+		await expect(initialization).rejects.toBe(initializationError);
+		expect(provider.calls.initialize).toBe(1);
+	});
+
+	it("returns the factory instance when provider initialization throws", async () => {
+		const provider = new MockAnalyticsProvider({ enabled: true });
+		const initializationError = new Error("synchronous initialization failed");
+		provider.initialize = () => {
+			provider.calls.initialize++;
+			throw initializationError;
+		};
+		const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+		let created: TestAnalytics | undefined;
+
+		try {
+			expect(() => {
+				created = createServerAnalytics({
+					events,
+					userTraits: typed<UserTraits>(),
+					providers: [provider],
+				});
+			}).not.toThrow();
+			expect(created).toBeInstanceOf(ServerAnalytics);
+			await vi.waitFor(() => {
+				expect(errorSpy).toHaveBeenCalledWith(
+					"[Analytics] Failed to initialize:",
+					initializationError,
+				);
+			});
+			expect(provider.calls.initialize).toBe(1);
+		} finally {
+			errorSpy.mockRestore();
+		}
 	});
 
 	it("tracks definition categories, properties, and server options", async () => {
