@@ -72,20 +72,73 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function hasOptionalStringFields(
+	value: Record<string, unknown>,
+	fields: readonly string[],
+): boolean {
+	return fields.every(
+		(field) => value[field] === undefined || typeof value[field] === "string",
+	);
+}
+
+function hasValidDimensions(value: unknown): boolean {
+	if (value === undefined) return true;
+	if (!isRecord(value)) return false;
+
+	return ["width", "height"].every(
+		(field) =>
+			value[field] === undefined ||
+			(typeof value[field] === "number" && Number.isFinite(value[field])),
+	);
+}
+
 function hasValidClientContext(value: unknown): boolean {
 	if (value === undefined) return true;
 	if (!isRecord(value)) return false;
 
-	for (const key of ["page", "utm", "device"] as const) {
-		const nested = value[key];
-		if (nested !== undefined && !isRecord(nested)) return false;
+	const page = value.page;
+	if (page !== undefined) {
+		if (
+			!isRecord(page) ||
+			typeof page.path !== "string" ||
+			!hasOptionalStringFields(page, [
+				"title",
+				"referrer",
+				"url",
+				"host",
+				"protocol",
+				"search",
+			])
+		) {
+			return false;
+		}
+	}
+
+	const utm = value.utm;
+	if (
+		utm !== undefined &&
+		(!isRecord(utm) ||
+			!hasOptionalStringFields(utm, ["source", "medium", "name"]))
+	) {
+		return false;
 	}
 
 	const device = value.device;
-	if (isRecord(device)) {
-		for (const key of ["screen", "viewport"] as const) {
-			const nested = device[key];
-			if (nested !== undefined && !isRecord(nested)) return false;
+	if (device !== undefined) {
+		if (
+			!isRecord(device) ||
+			!hasOptionalStringFields(device, [
+				"type",
+				"os",
+				"browser",
+				"userAgent",
+				"language",
+				"timezone",
+			]) ||
+			!hasValidDimensions(device.screen) ||
+			!hasValidDimensions(device.viewport)
+		) {
+			return false;
 		}
 	}
 
@@ -168,7 +221,6 @@ function sanitizeClientContext(
 				type: context.device.type,
 				os: context.device.os,
 				browser: context.device.browser,
-				userAgent: context.device.userAgent,
 				language: context.device.language,
 				timezone: context.device.timezone,
 				screen: context.device.screen

@@ -9,6 +9,7 @@ export type {
 	ProviderConfigOrProvider,
 	ProviderMethod,
 	ServerContext,
+	TrackInvocation,
 	UserContext,
 } from "@/core/events/types.js";
 

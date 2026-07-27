@@ -145,6 +145,49 @@ describe("Proxy Server Ingestion", () => {
 			});
 			expect(mockProvider.calls.track).toHaveLength(0);
 		});
+
+		it.each([
+			["page path", { page: { path: 42 } }],
+			["page title", { page: { path: "/", title: 42 } }],
+			["UTM source", { utm: { source: 42 } }],
+			["device language", { device: { language: 42 } }],
+			["screen width", { device: { screen: { width: "wide" } } }],
+			["viewport height", { device: { viewport: { height: "tall" } } }],
+		])(
+			"rejects malformed known client context field %s",
+			async (_label, context) => {
+				const onError = vi.fn();
+				const body = {
+					version: 2,
+					events: [
+						{
+							type: "track",
+							name: "event1",
+							inputProvided: true,
+							input: {},
+							occurredAt: 1_725_000_000_000,
+							context,
+						},
+					],
+				};
+
+				await expect(
+					ingestProxyEvents(requestFor(body), serverAnalytics, { onError }),
+				).rejects.toMatchObject({
+					name: "ProxyTrustError",
+					code: "invalid_payload",
+					message: "Proxy request rejected: invalid_payload",
+				});
+				expect(onError).toHaveBeenCalledWith(
+					expect.objectContaining({
+						name: "ProxyTrustError",
+						code: "invalid_payload",
+					}),
+				);
+				expect(mockProvider.calls.track).toHaveLength(0);
+				expect(mockProvider.calls.pageView).toHaveLength(0);
+			},
+		);
 	});
 
 	describe("track trust boundary", () => {
@@ -287,6 +330,34 @@ describe("Proxy Server Ingestion", () => {
 			expect(delivered).not.toContain("forged-server-agent");
 			expect(delivered).not.toContain("forged-device-agent");
 			expect(delivered).not.toContain("203.0.113.66");
+		});
+
+		it("drops a browser-supplied device user-agent when the request has none", async () => {
+			const forged = {
+				type: "track",
+				name: "event1",
+				inputProvided: true,
+				input: {},
+				occurredAt: 1_725_000_000_000,
+				context: {
+					device: {
+						userAgent: "forged-browser-agent",
+						language: "nl-NL",
+					},
+				},
+			} as unknown as ProxyEventV2;
+
+			await ingestProxyEvents(requestFor(payload([forged])), serverAnalytics);
+
+			expect(mockProvider.calls.track[0].context?.device).toMatchObject({
+				language: "nl-NL",
+			});
+			expect(
+				mockProvider.calls.track[0].context?.device?.userAgent,
+			).toBeUndefined();
+			expect(JSON.stringify(mockProvider.calls.track[0])).not.toContain(
+				"forged-browser-agent",
+			);
 		});
 
 		it("uses only resolver-derived identity for track events", async () => {
@@ -602,6 +673,52 @@ describe("Proxy Server Ingestion", () => {
 				context: { page: { path: "/landing" } },
 			});
 			expect(mockProvider.calls.pageView[1].context?.user).toBeUndefined();
+		});
+
+		it("suppresses ServerAnalytics default identity when no resolver is configured", async () => {
+			const provider = new MockAnalyticsProvider();
+			const analytics = createServerAnalytics({
+				events: proxyEvents,
+				userTraits: typed<UserTraits>(),
+				providers: [provider],
+				defaultContext: {
+					user: {
+						userId: "default-user",
+						email: "default@example.com",
+						traits: { role: "default-admin" },
+					},
+				},
+			});
+			await analytics.initialize();
+
+			await ingestProxyEvents(
+				requestFor(
+					payload([
+						{
+							type: "track",
+							name: "event1",
+							inputProvided: true,
+							input: {},
+							occurredAt: 1_725_000_000_000,
+						},
+						{
+							type: "pageView",
+							occurredAt: 1_725_000_000_001,
+							context: { page: { path: "/anonymous" } },
+						},
+					]),
+				),
+				analytics,
+			);
+
+			expect(provider.calls.track[0].event.userId).toBeUndefined();
+			expect(provider.calls.track[0].context?.user).toBeUndefined();
+			expect(provider.calls.pageView[0].context?.user).toBeUndefined();
+			expect(JSON.stringify(provider.calls)).not.toContain("default-user");
+			expect(JSON.stringify(provider.calls)).not.toContain(
+				"default@example.com",
+			);
+			expect(JSON.stringify(provider.calls)).not.toContain("default-admin");
 		});
 
 		it("keeps reset as a server no-op", async () => {

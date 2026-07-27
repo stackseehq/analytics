@@ -1,8 +1,10 @@
+import type { StandardSchemaV1 } from "@standard-schema/spec";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { z } from "zod";
 import { BrowserAnalytics } from "@/adapters/client/browser-analytics.js";
 import { defineEvents } from "@/core/events/index.js";
 import type { BaseEvent, EventContext } from "@/core/events/types.js";
+import type { TrackInvocation } from "@/index.js";
 import { ProxyProvider } from "@/providers/proxy/client.js";
 import type { ProxyPayloadV2 } from "@/providers/proxy/types.js";
 import { MockAnalyticsProvider } from "./mock-provider.js";
@@ -12,11 +14,12 @@ function trackWithInvocation(
 	event: BaseEvent,
 	context?: EventContext,
 ): Promise<void> {
-	return provider.track(event, context, {
+	const invocation: TrackInvocation = {
 		input: event.properties,
 		inputProvided: Object.hasOwn(event, "properties"),
 		occurredAt: event.timestamp ?? 1_234_567_890,
-	});
+	};
+	return provider.track(event, context, invocation);
 }
 
 describe("ProxyProvider", () => {
@@ -651,19 +654,43 @@ describe("ProxyProvider", () => {
 	});
 
 	describe("V2 trust boundary", () => {
-		it("sends raw registry input through BrowserAnalytics while normal providers receive transformed properties", async () => {
+		it("sends raw registry input after async validation while normal providers receive transformed properties", async () => {
 			const proxy = new ProxyProvider({
 				endpoint: "/api/events",
 				batch: { size: 100, interval: 10000 },
 			});
 			const normalProvider = new MockAnalyticsProvider();
+			let markValidationStarted!: () => void;
+			let releaseValidation!: () => void;
+			const validationStarted = new Promise<void>((resolve) => {
+				markValidationStarted = resolve;
+			});
+			const validationGate = new Promise<void>((resolve) => {
+				releaseValidation = resolve;
+			});
+			const asyncTransform: StandardSchemaV1<
+				{ amount: string },
+				{ amount: number }
+			> = {
+				"~standard": {
+					version: 1,
+					vendor: "trakoo-test",
+					validate: async (input) => {
+						markValidationStarted();
+						await validationGate;
+						return {
+							value: {
+								amount: Number((input as { amount: string }).amount),
+							},
+						};
+					},
+				},
+			};
 			const events = defineEvents({
 				purchaseCompleted: {
 					name: "purchase_completed",
 					category: "conversion",
-					properties: z.object({
-						amount: z.string().transform(Number),
-					}),
+					properties: asyncTransform,
 				},
 			});
 			const analytics = new BrowserAnalytics({
@@ -672,7 +699,14 @@ describe("ProxyProvider", () => {
 				validation: { onFailure: "throw" },
 			});
 
-			await analytics.track("purchase_completed", { amount: "49" });
+			const trackPromise = analytics.track("purchase_completed", {
+				amount: "49",
+			});
+			await validationStarted;
+			expect(fetchMock).not.toHaveBeenCalled();
+			expect(normalProvider.calls.track).toHaveLength(0);
+			releaseValidation();
+			await trackPromise;
 			await proxy.flush();
 
 			const payload = JSON.parse(fetchMock.mock.calls[0][1].body) as Record<
