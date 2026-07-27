@@ -4,7 +4,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { MockAnalyticsProvider } from "./mock-provider";
 import { createClientAnalytics } from "@/client";
-import { defineEvents, typed } from "@/core/events";
+import { defineEvents, noProperties, typed } from "@/core/events";
 import { createServerAnalytics } from "@/server";
 import type { BrowserAnalytics } from "@/adapters/client/browser-analytics";
 import type { ServerAnalytics } from "@/adapters/server/server-analytics";
@@ -50,6 +50,205 @@ const clientRoutingEvents = defineEvents({
 		properties: typed<{ buttonId: string }>(),
 	},
 });
+
+const adversarialRoutingEvents = defineEvents({
+	billingDotPaid: {
+		name: "billing.v2_paid",
+		category: "conversion",
+		properties: noProperties(),
+	},
+	billingDotPrivate: {
+		name: "billingXv2_private",
+		category: "conversion",
+		properties: noProperties(),
+	},
+	featurePlusEnabled: {
+		name: "feature+_enabled",
+		category: "engagement",
+		properties: noProperties(),
+	},
+	featurePlusPrivate: {
+		name: "featureeee_private",
+		category: "engagement",
+		properties: noProperties(),
+	},
+	questionMark: {
+		name: "question?mark",
+		category: "engagement",
+		properties: noProperties(),
+	},
+	questionMarkPrivate: {
+		name: "questionXmark",
+		category: "engagement",
+		properties: noProperties(),
+	},
+	anchors: {
+		name: "^private$",
+		category: "engagement",
+		properties: noProperties(),
+	},
+	anchorsPrivate: {
+		name: "private",
+		category: "engagement",
+		properties: noProperties(),
+	},
+	brackets: {
+		name: "literal[beta]",
+		category: "engagement",
+		properties: noProperties(),
+	},
+	bracketsPrivate: {
+		name: "literalb",
+		category: "engagement",
+		properties: noProperties(),
+	},
+	parentheses: {
+		name: "checkout_(new)",
+		category: "conversion",
+		properties: noProperties(),
+	},
+	parenthesesPrivate: {
+		name: "checkout_new",
+		category: "conversion",
+		properties: noProperties(),
+	},
+	braces: {
+		name: "order{draft}",
+		category: "conversion",
+		properties: noProperties(),
+	},
+	bracesPrivate: {
+		name: "orderdraft",
+		category: "conversion",
+		properties: noProperties(),
+	},
+	pipe: {
+		name: "plan|pro",
+		category: "engagement",
+		properties: noProperties(),
+	},
+	pipePrivate: {
+		name: "plan",
+		category: "engagement",
+		properties: noProperties(),
+	},
+	backslash: {
+		name: "path\\root",
+		category: "navigation",
+		properties: noProperties(),
+	},
+	backslashPrivate: {
+		name: "pathroot",
+		category: "navigation",
+		properties: noProperties(),
+	},
+	unmatchedBracket: {
+		name: "unmatched[",
+		category: "engagement",
+		properties: noProperties(),
+	},
+	unmatchedParenthesis: {
+		name: "unmatched(",
+		category: "engagement",
+		properties: noProperties(),
+	},
+	unmatchedPrivate: {
+		name: "unmatched",
+		category: "engagement",
+		properties: noProperties(),
+	},
+	anything: {
+		name: "anything",
+		category: "engagement",
+		properties: noProperties(),
+	},
+	anythingElse: {
+		name: "anything_else",
+		category: "engagement",
+		properties: noProperties(),
+	},
+	notAnything: {
+		name: "not_anything",
+		category: "engagement",
+		properties: noProperties(),
+	},
+	complete: {
+		name: "complete",
+		category: "engagement",
+		properties: noProperties(),
+	},
+	checkoutComplete: {
+		name: "checkout_complete",
+		category: "conversion",
+		properties: noProperties(),
+	},
+	completeLater: {
+		name: "complete_later",
+		category: "engagement",
+		properties: noProperties(),
+	},
+});
+
+const metacharacterPatterns = [
+	"billing.v2_*",
+	"feature+_*",
+	"question?mark",
+	"^private$",
+	"literal[beta]",
+	"checkout_(new)",
+	"order{draft}",
+	"plan|pro",
+	"path\\root",
+	"unmatched[",
+	"unmatched(",
+];
+
+const metacharacterEventNames = [
+	"billing.v2_paid",
+	"billingXv2_private",
+	"feature+_enabled",
+	"featureeee_private",
+	"question?mark",
+	"questionXmark",
+	"^private$",
+	"private",
+	"literal[beta]",
+	"literalb",
+	"checkout_(new)",
+	"checkout_new",
+	"order{draft}",
+	"orderdraft",
+	"plan|pro",
+	"plan",
+	"path\\root",
+	"pathroot",
+	"unmatched[",
+	"unmatched(",
+	"unmatched",
+] as const;
+
+const expectedLiteralMatches = [
+	"billing.v2_paid",
+	"feature+_enabled",
+	"question?mark",
+	"^private$",
+	"literal[beta]",
+	"checkout_(new)",
+	"order{draft}",
+	"plan|pro",
+	"path\\root",
+	"unmatched[",
+	"unmatched(",
+];
+
+const wildcardEventNames = [
+	"anything",
+	"anything_else",
+	"not_anything",
+	"complete",
+	"checkout_complete",
+	"complete_later",
+] as const;
 
 describe("Provider Routing - Client", () => {
 	let provider1: MockAnalyticsProvider;
@@ -520,6 +719,78 @@ describe("Event-Level Routing - Client", () => {
 		expect(provider1.calls.track[2].event.action).toBe("user_registered");
 	});
 
+	it("treats regex metacharacters literally without leaking non-matching events", async () => {
+		const literalProvider = new MockAnalyticsProvider();
+		const metacharacterAnalytics = createClientAnalytics({
+			events: adversarialRoutingEvents,
+			providers: [
+				{
+					provider: literalProvider,
+					eventPatterns: metacharacterPatterns,
+				},
+			],
+		});
+
+		await metacharacterAnalytics.initialize();
+		for (const eventName of metacharacterEventNames) {
+			await metacharacterAnalytics.track(eventName);
+		}
+
+		expect(
+			literalProvider.calls.track.map(({ event }) => event.action),
+		).toEqual(expectedLiteralMatches);
+	});
+
+	it("keeps wildcard routing anchored for wildcard-only, prefix, and suffix patterns", async () => {
+		const prefixProvider = new MockAnalyticsProvider();
+		const suffixProvider = new MockAnalyticsProvider();
+		const wildcardProvider = new MockAnalyticsProvider();
+		const wildcardAnalytics = createClientAnalytics({
+			events: adversarialRoutingEvents,
+			providers: [
+				{ provider: prefixProvider, eventPatterns: ["anything*"] },
+				{ provider: suffixProvider, eventPatterns: ["*complete"] },
+				{ provider: wildcardProvider, eventPatterns: ["*"] },
+			],
+		});
+
+		await wildcardAnalytics.initialize();
+		for (const eventName of wildcardEventNames) {
+			await wildcardAnalytics.track(eventName);
+		}
+
+		expect(prefixProvider.calls.track.map(({ event }) => event.action)).toEqual(
+			["anything", "anything_else"],
+		);
+		expect(suffixProvider.calls.track.map(({ event }) => event.action)).toEqual(
+			["complete", "checkout_complete"],
+		);
+		expect(
+			wildcardProvider.calls.track.map(({ event }) => event.action),
+		).toEqual(wildcardEventNames);
+	});
+
+	it("rejects non-string event patterns with a stable TypeError", () => {
+		let thrown: unknown;
+
+		try {
+			createClientAnalytics({
+				events: adversarialRoutingEvents,
+				providers: [
+					{
+						provider: new MockAnalyticsProvider(),
+						eventPatterns: [42 as unknown as string],
+					},
+				],
+			});
+		} catch (error) {
+			thrown = error;
+		}
+
+		expect(thrown).toBeInstanceOf(TypeError);
+		expect(thrown).toHaveProperty("message", "Event pattern must be a string");
+	});
+
 	it("should combine method and event routing", async () => {
 		analytics = createClientAnalytics({
 			events: clientRoutingEvents,
@@ -703,6 +974,78 @@ describe("Event-Level Routing - Server", () => {
 			"newsletter_unsubscribe",
 		);
 		expect(provider1.calls.track[2].event.action).toBe("user_registered");
+	});
+
+	it("treats regex metacharacters literally without leaking non-matching events", async () => {
+		const literalProvider = new MockAnalyticsProvider();
+		const metacharacterAnalytics = createServerAnalytics({
+			events: adversarialRoutingEvents,
+			providers: [
+				{
+					provider: literalProvider,
+					eventPatterns: metacharacterPatterns,
+				},
+			],
+		});
+
+		await metacharacterAnalytics.initialize();
+		for (const eventName of metacharacterEventNames) {
+			await metacharacterAnalytics.track(eventName);
+		}
+
+		expect(
+			literalProvider.calls.track.map(({ event }) => event.action),
+		).toEqual(expectedLiteralMatches);
+	});
+
+	it("keeps wildcard routing anchored for wildcard-only, prefix, and suffix patterns", async () => {
+		const prefixProvider = new MockAnalyticsProvider();
+		const suffixProvider = new MockAnalyticsProvider();
+		const wildcardProvider = new MockAnalyticsProvider();
+		const wildcardAnalytics = createServerAnalytics({
+			events: adversarialRoutingEvents,
+			providers: [
+				{ provider: prefixProvider, eventPatterns: ["anything*"] },
+				{ provider: suffixProvider, eventPatterns: ["*complete"] },
+				{ provider: wildcardProvider, eventPatterns: ["*"] },
+			],
+		});
+
+		await wildcardAnalytics.initialize();
+		for (const eventName of wildcardEventNames) {
+			await wildcardAnalytics.track(eventName);
+		}
+
+		expect(prefixProvider.calls.track.map(({ event }) => event.action)).toEqual(
+			["anything", "anything_else"],
+		);
+		expect(suffixProvider.calls.track.map(({ event }) => event.action)).toEqual(
+			["complete", "checkout_complete"],
+		);
+		expect(
+			wildcardProvider.calls.track.map(({ event }) => event.action),
+		).toEqual(wildcardEventNames);
+	});
+
+	it("rejects non-string event patterns with a stable TypeError", () => {
+		let thrown: unknown;
+
+		try {
+			createServerAnalytics({
+				events: adversarialRoutingEvents,
+				providers: [
+					{
+						provider: new MockAnalyticsProvider(),
+						eventPatterns: [42 as unknown as string],
+					},
+				],
+			});
+		} catch (error) {
+			thrown = error;
+		}
+
+		expect(thrown).toBeInstanceOf(TypeError);
+		expect(thrown).toHaveProperty("message", "Event pattern must be a string");
 	});
 
 	it("should combine method and event routing", async () => {

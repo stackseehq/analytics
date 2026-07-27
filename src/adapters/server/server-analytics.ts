@@ -21,6 +21,7 @@ import {
 	type ResolvedEvent,
 	type ValidationConfig,
 } from "@/core/events/validation.js";
+import { compileEventPattern } from "@/utils/event-pattern.js";
 
 export interface ServerTrackOptions<TUserTraits extends object> {
 	readonly userId?: string;
@@ -214,11 +215,7 @@ export class ServerAnalytics<
 				providerConfig.eventPatterns.length > 0
 			) {
 				// Compile glob patterns into regex
-				eventPatterns = providerConfig.eventPatterns.map((pattern) => {
-					// Convert glob pattern to regex: * -> .*
-					const regexPattern = pattern.replace(/\*/g, ".*");
-					return new RegExp(`^${regexPattern}$`);
-				});
+				eventPatterns = providerConfig.eventPatterns.map(compileEventPattern);
 			} else if (
 				providerConfig.excludeEvents &&
 				providerConfig.excludeEvents.length > 0
