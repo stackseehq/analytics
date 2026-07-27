@@ -3,7 +3,7 @@ title: Installation
 description: Install trakoo and the SDK packages required by each provider.
 ---
 
-Install the core package first, then add only the provider SDKs your app uses.
+Install the core package first, then add only the provider SDKs your app uses. Trakoo does not auto-install provider SDKs.
 
 ## Core package
 
@@ -52,6 +52,8 @@ import { PostHogServerProvider } from 'trakoo/providers/server';
 The root `trakoo` entry point contains environment-neutral event helpers and shared types. Factories live on `trakoo/client` and `trakoo/server`. Use `trakoo/providers/client` in browser bundles and `trakoo/providers/server` in server-only code; there is no combined provider entry point.
 
 ## Provider SDKs
+
+The aggregate `trakoo/providers/client` and `trakoo/providers/server` entry points are safe to import without every provider SDK installed. Provider construction is also safe. An SDK is loaded only when its provider initializes; initialization without that optional peer throws a clear package-specific error.
 
 | Provider | Client support | Server support | Extra install |
 |----------|----------------|----------------|---------------|

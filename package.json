@@ -72,14 +72,20 @@
 	},
 	"homepage": "https://github.com/multiplehats/trakoo#readme",
 	"devDependencies": {
+		"@bentonow/bento-node-sdk": "^0.2.1",
 		"@biomejs/biome": "1.9.4",
 		"@changesets/cli": "^2.29.4",
+		"@emitkit/js": "^2.1.0",
+		"@openpanel/sdk": "^1.3.1",
+		"@openpanel/web": "^1.4.1",
 		"@svitejs/changesets-changelog-github-compact": "^1.2.0",
 		"@types/node": "^20.17.51",
 		"@vitest/coverage-v8": "3.1.4",
 		"globals": "^15.8.0",
 		"jsdom": "^26.1.0",
 		"playwright": "^1.58.2",
+		"posthog-js": "^1.268.2",
+		"posthog-node": "^5.9.0",
 		"prettier": "^3.3.3",
 		"typescript": "~5.5.3",
 		"vite": "^6.3.5",
@@ -87,14 +93,33 @@
 		"vitest": "^2.0.3",
 		"zod": "^4.4.3"
 	},
-	"optionalDependencies": {
+	"peerDependencies": {
 		"@bentonow/bento-node-sdk": "^0.2.1",
 		"@emitkit/js": "^2.1.0",
 		"@openpanel/sdk": "^1.3.1",
 		"@openpanel/web": "^1.4.1",
-		"@types/css-font-loading-module": "0.0.13",
 		"posthog-js": "^1.268.2",
 		"posthog-node": "^5.9.0"
+	},
+	"peerDependenciesMeta": {
+		"@bentonow/bento-node-sdk": {
+			"optional": true
+		},
+		"@emitkit/js": {
+			"optional": true
+		},
+		"@openpanel/sdk": {
+			"optional": true
+		},
+		"@openpanel/web": {
+			"optional": true
+		},
+		"posthog-js": {
+			"optional": true
+		},
+		"posthog-node": {
+			"optional": true
+		}
 	},
 	"engines": {
 		"pnpm": ">=9.0.0",

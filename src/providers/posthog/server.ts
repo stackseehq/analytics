@@ -1,11 +1,35 @@
 import type { BaseEvent, EventContext } from "@/core/events/types.js";
 import { BaseAnalyticsProvider } from "@/providers/base.provider.js";
-import { PostHog, type PostHogOptions } from "posthog-node";
+import type { PostHog, PostHogOptions } from "posthog-node";
+
+const isMissingPackageError = (
+	error: unknown,
+	packageName: string,
+): boolean => {
+	try {
+		if (!error || typeof error !== "object") return false;
+		const code = Reflect.get(error, "code");
+		const message = Reflect.get(error, "message");
+		if (
+			(code !== "ERR_MODULE_NOT_FOUND" && code !== "MODULE_NOT_FOUND") ||
+			typeof message !== "string"
+		) {
+			return false;
+		}
+		return (
+			message.includes(`Cannot find package '${packageName}'`) ||
+			message.includes(`Cannot find module '${packageName}'`)
+		);
+	} catch {
+		return false;
+	}
+};
 
 export class PostHogServerProvider extends BaseAnalyticsProvider {
 	name = "PostHog-Server";
 	private client?: PostHog;
 	private initialized = false;
+	private initializePromise?: Promise<void>;
 	private config: { apiKey: string } & PostHogOptions;
 
 	constructor(
@@ -18,33 +42,48 @@ export class PostHogServerProvider extends BaseAnalyticsProvider {
 		this.config = config;
 	}
 
-	initialize(): void {
-		if (!this.isEnabled()) return;
-		if (this.initialized) return;
+	initialize(): Promise<void> {
+		if (!this.isEnabled() || this.initialized) return Promise.resolve();
+		if (this.initializePromise) return this.initializePromise;
 
+		this.initializePromise = this.initializePostHog().catch((error) => {
+			this.initializePromise = undefined;
+			console.error(
+				`[PostHog-Server] Failed to initialize (${this.getErrorClass(error)})`,
+			);
+			throw error;
+		});
+		return this.initializePromise;
+	}
+
+	private async initializePostHog(): Promise<void> {
 		// Validate config has required fields
 		if (!this.config.apiKey || typeof this.config.apiKey !== "string") {
 			throw new Error("PostHog requires an apiKey");
 		}
 
+		let PostHogClient: typeof import("posthog-node").PostHog;
 		try {
-			const { apiKey, ...posthogOptions } = this.config;
-
-			this.client = new PostHog(apiKey, {
-				host: "https://app.posthog.com",
-				flushAt: 20,
-				flushInterval: 10000,
-				...posthogOptions,
-			});
-
-			this.initialized = true;
-			this.log("Initialized successfully");
+			({ PostHog: PostHogClient } = await import("posthog-node"));
 		} catch (error) {
-			console.error(
-				`[PostHog-Server] Failed to initialize (${this.getErrorClass(error)})`,
-			);
+			if (isMissingPackageError(error, "posthog-node")) {
+				throw new Error(
+					"PostHog server provider requires the optional peer package posthog-node",
+				);
+			}
 			throw error;
 		}
+
+		const { apiKey, ...posthogOptions } = this.config;
+		this.client = new PostHogClient(apiKey, {
+			host: "https://app.posthog.com",
+			flushAt: 20,
+			flushInterval: 10000,
+			...posthogOptions,
+		});
+
+		this.initialized = true;
+		this.log("Initialized successfully");
 	}
 
 	identify(userId: string, traits?: Record<string, unknown>): void {

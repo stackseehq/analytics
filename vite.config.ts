@@ -2,6 +2,15 @@ import { resolve } from "node:path";
 import { defineConfig } from "vite";
 import dts from "vite-plugin-dts";
 
+const providerSdkPackages = [
+	"@bentonow/bento-node-sdk",
+	"@emitkit/js",
+	"@openpanel/sdk",
+	"@openpanel/web",
+	"posthog-js",
+	"posthog-node",
+] as const;
+
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
 	return {
@@ -18,12 +27,7 @@ export default defineConfig(({ mode }) => {
 				formats: ["es"],
 			},
 			rollupOptions: {
-				external: [
-					"@openpanel/sdk",
-					"@openpanel/web",
-					"posthog-node",
-					"posthog-js",
-				],
+				external: providerSdkPackages,
 			},
 			ssr: false,
 		},

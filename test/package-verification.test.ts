@@ -3,10 +3,37 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { assertRootBundleNeutral } from "../scripts/package-verification.mjs";
-import {
+import * as packageVerifier from "../scripts/verify-package.mjs";
+
+const {
 	assertDeclarationTargetsExist,
 	assertMitPackageLicense,
-} from "../scripts/verify-package.mjs";
+	assertNoBundledProviderChunks,
+	assertOptionalProviderPeers,
+	assertProviderSdksAbsent,
+} = packageVerifier as typeof packageVerifier & {
+	assertNoBundledProviderChunks: (
+		distDirectory: string,
+		forbiddenNameFragments: string[],
+	) => void;
+	assertOptionalProviderPeers: (
+		manifest: Record<string, unknown>,
+		providerPackages: string[],
+	) => void;
+	assertProviderSdksAbsent: (
+		nodeModulesDirectory: string,
+		providerPackages: string[],
+	) => void;
+};
+
+const providerPackages = [
+	"@bentonow/bento-node-sdk",
+	"@emitkit/js",
+	"@openpanel/sdk",
+	"@openpanel/web",
+	"posthog-js",
+	"posthog-node",
+];
 
 describe("packed license verification", () => {
 	it("accepts MIT package metadata and license text", () => {
@@ -83,6 +110,116 @@ describe("packed root bundle verification", () => {
 			).toThrow(
 				"root bundle includes @bentonow/bento-node-sdk in chunks/validation.js",
 			);
+		} finally {
+			rmSync(distDirectory, { recursive: true, force: true });
+		}
+	});
+});
+
+describe("optional provider peer verification", () => {
+	it("accepts SDKs only when every peer is marked optional", () => {
+		const manifest = {
+			peerDependencies: Object.fromEntries(
+				providerPackages.map((packageName) => [packageName, "^1.0.0"]),
+			),
+			peerDependenciesMeta: Object.fromEntries(
+				providerPackages.map((packageName) => [
+					packageName,
+					{ optional: true },
+				]),
+			),
+		};
+
+		expect(() =>
+			assertOptionalProviderPeers(manifest, providerPackages),
+		).not.toThrow();
+	});
+
+	it("rejects a provider SDK that is missing optional peer metadata", () => {
+		expect(() =>
+			assertOptionalProviderPeers(
+				{
+					peerDependencies: { "posthog-node": "^5.9.0" },
+					peerDependenciesMeta: { "posthog-node": { optional: false } },
+				},
+				["posthog-node"],
+			),
+		).toThrow("posthog-node must be an optional peer dependency");
+	});
+
+	it("rejects provider SDKs from installable dependency fields", () => {
+		expect(() =>
+			assertOptionalProviderPeers(
+				{
+					peerDependencies: { "@emitkit/js": "^2.1.0" },
+					peerDependenciesMeta: { "@emitkit/js": { optional: true } },
+					optionalDependencies: { "@emitkit/js": "^2.1.0" },
+				},
+				["@emitkit/js"],
+			),
+		).toThrow("@emitkit/js must not be an optionalDependency");
+	});
+
+	it("detects scoped and unscoped provider SDK directories", () => {
+		const nodeModulesDirectory = mkdtempSync(
+			join(tmpdir(), "trakoo-provider-sdk-absence-"),
+		);
+		try {
+			mkdirSync(join(nodeModulesDirectory, "@openpanel", "sdk"), {
+				recursive: true,
+			});
+			expect(() =>
+				assertProviderSdksAbsent(nodeModulesDirectory, ["@openpanel/sdk"]),
+			).toThrow("@openpanel/sdk");
+
+			rmSync(join(nodeModulesDirectory, "@openpanel"), {
+				recursive: true,
+				force: true,
+			});
+			mkdirSync(join(nodeModulesDirectory, "posthog-node"));
+			expect(() =>
+				assertProviderSdksAbsent(nodeModulesDirectory, ["posthog-node"]),
+			).toThrow("posthog-node");
+
+			rmSync(join(nodeModulesDirectory, "posthog-node"), {
+				recursive: true,
+				force: true,
+			});
+			expect(() =>
+				assertProviderSdksAbsent(nodeModulesDirectory, providerPackages),
+			).not.toThrow();
+		} finally {
+			rmSync(nodeModulesDirectory, { recursive: true, force: true });
+		}
+	});
+
+	it("rejects provider implementation chunk filenames without scanning imports", () => {
+		const distDirectory = mkdtempSync(
+			join(tmpdir(), "trakoo-provider-chunks-"),
+		);
+		try {
+			mkdirSync(join(distDirectory, "chunks"));
+			writeFileSync(
+				join(distDirectory, "providers.js"),
+				'import("@bentonow/bento-node-sdk"); import("@emitkit/js");',
+			);
+			expect(() =>
+				assertNoBundledProviderChunks(distDirectory, [
+					"bento-node-sdk",
+					"emitkit",
+				]),
+			).not.toThrow();
+
+			writeFileSync(
+				join(distDirectory, "chunks", "bento-node-sdk-abc123.js"),
+				"export {};",
+			);
+			expect(() =>
+				assertNoBundledProviderChunks(distDirectory, [
+					"bento-node-sdk",
+					"emitkit",
+				]),
+			).toThrow("bento-node-sdk-abc123.js");
 		} finally {
 			rmSync(distDirectory, { recursive: true, force: true });
 		}

@@ -32,15 +32,15 @@ describe("PostHogServerProvider", () => {
 		sdk.shutdown.mockResolvedValue(undefined);
 	});
 
-	it("initializes once and preserves track identity and properties", () => {
+	it("initializes once and preserves track identity and properties", async () => {
 		const provider = new PostHogServerProvider({
 			apiKey: "project-key",
 			host: "https://posthog.example.com",
 			flushAt: 10,
 		});
 
-		provider.initialize();
-		provider.initialize();
+		await provider.initialize();
+		await provider.initialize();
 		provider.track(
 			{
 				action: "invoice_paid",
@@ -91,9 +91,9 @@ describe("PostHogServerProvider", () => {
 		});
 	});
 
-	it("attributes page views to the current user ID before email", () => {
+	it("attributes page views to the current user ID before email", async () => {
 		const provider = new PostHogServerProvider({ apiKey: "project-key" });
-		provider.initialize();
+		await provider.initialize();
 
 		provider.pageView(
 			{ section: "docs", depth: 2 },
@@ -123,9 +123,9 @@ describe("PostHogServerProvider", () => {
 		});
 	});
 
-	it("uses current-call email when a page view has no user ID", () => {
+	it("uses current-call email when a page view has no user ID", async () => {
 		const provider = new PostHogServerProvider({ apiKey: "project-key" });
-		provider.initialize();
+		await provider.initialize();
 
 		provider.pageView(
 			{ section: "pricing" },
@@ -139,9 +139,9 @@ describe("PostHogServerProvider", () => {
 		});
 	});
 
-	it("keeps page views anonymous when current context has no identity", () => {
+	it("keeps page views anonymous when current context has no identity", async () => {
 		const provider = new PostHogServerProvider({ apiKey: "project-key" });
-		provider.initialize();
+		await provider.initialize();
 
 		provider.pageView({ section: "home" });
 
@@ -152,9 +152,9 @@ describe("PostHogServerProvider", () => {
 		});
 	});
 
-	it("does not retain identify identity for a later anonymous page view", () => {
+	it("does not retain identify identity for a later anonymous page view", async () => {
 		const provider = new PostHogServerProvider({ apiKey: "project-key" });
-		provider.initialize();
+		await provider.initialize();
 
 		provider.identify("old-user", { plan: "pro" });
 		provider.pageView({ section: "home" });
@@ -170,7 +170,7 @@ describe("PostHogServerProvider", () => {
 		});
 	});
 
-	it("keeps configuration, identity, properties, and context out of debug logs", () => {
+	it("keeps configuration, identity, properties, and context out of debug logs", async () => {
 		const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
 		const provider = new PostHogServerProvider({
 			apiKey: "DO_NOT_LOG_API_KEY",
@@ -178,7 +178,7 @@ describe("PostHogServerProvider", () => {
 			debug: true,
 		});
 
-		provider.initialize();
+		await provider.initialize();
 		provider.identify("DO_NOT_LOG_USER_ID", {
 			email: "DO_NOT_LOG_EMAIL",
 		});
@@ -205,7 +205,7 @@ describe("PostHogServerProvider", () => {
 		consoleSpy.mockRestore();
 	});
 
-	it("logs neither external error messages nor hostile error names", () => {
+	it("logs neither external error messages nor hostile error names", async () => {
 		const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 		const externalError = new Error("DO_NOT_LOG_EXTERNAL_ERROR_MESSAGE");
 		externalError.name = "DO_NOT_LOG_HOSTILE_ERROR_NAME";
@@ -216,11 +216,27 @@ describe("PostHogServerProvider", () => {
 			apiKey: "DO_NOT_LOG_API_KEY",
 		});
 
-		expect(() => provider.initialize()).toThrow(externalError);
+		await expect(provider.initialize()).rejects.toBe(externalError);
 
 		const output = JSON.stringify(consoleSpy.mock.calls);
 		expect(output).not.toContain("DO_NOT_LOG");
 		expect(consoleSpy.mock.calls[0]).toHaveLength(1);
 		consoleSpy.mockRestore();
+	});
+
+	it("coalesces concurrent initialization and retries after a rejected initializer", async () => {
+		const initializationError = new Error("first initialization failed");
+		constructorSpy.mockImplementationOnce(() => {
+			throw initializationError;
+		});
+		const provider = new PostHogServerProvider({ apiKey: "project-key" });
+
+		const first = provider.initialize();
+		const concurrent = provider.initialize();
+
+		expect(first).toBe(concurrent);
+		await expect(first).rejects.toBe(initializationError);
+		await expect(provider.initialize()).resolves.toBeUndefined();
+		expect(constructorSpy).toHaveBeenCalledTimes(2);
 	});
 });

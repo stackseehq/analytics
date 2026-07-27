@@ -33,11 +33,13 @@ The source is [`skills/trakoo/SKILL.md`](./skills/trakoo/SKILL.md) and follows t
 pnpm install trakoo
 ```
 
-Install only the SDKs required by your providers. For example:
+Trakoo core does not auto-install provider SDKs. Install only the SDKs required by the providers you use. For example:
 
 ```bash
 pnpm install posthog-js posthog-node
 ```
+
+The aggregate `trakoo/providers/client` and `trakoo/providers/server` entry points are safe to import before an SDK is installed. Constructing a provider is also safe; initializing it without its optional peer SDK throws a clear package-specific error.
 
 ## Quick start
 

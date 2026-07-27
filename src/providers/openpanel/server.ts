@@ -5,7 +5,30 @@ import {
 	buildIdentifyPayload,
 	buildTrackedEventProperties,
 } from "@/providers/openpanel/shared.js";
-import { OpenPanel, type OpenPanelOptions } from "@openpanel/sdk";
+import type { OpenPanel, OpenPanelOptions } from "@openpanel/sdk";
+
+const isMissingPackageError = (
+	error: unknown,
+	packageName: string,
+): boolean => {
+	try {
+		if (!error || typeof error !== "object") return false;
+		const code = Reflect.get(error, "code");
+		const message = Reflect.get(error, "message");
+		if (
+			(code !== "ERR_MODULE_NOT_FOUND" && code !== "MODULE_NOT_FOUND") ||
+			typeof message !== "string"
+		) {
+			return false;
+		}
+		return (
+			message.includes(`Cannot find package '${packageName}'`) ||
+			message.includes(`Cannot find module '${packageName}'`)
+		);
+	} catch {
+		return false;
+	}
+};
 
 export interface OpenPanelServerConfig {
 	clientId: string;
@@ -21,14 +44,28 @@ export class OpenPanelServerProvider extends BaseAnalyticsProvider {
 	private client?: OpenPanel;
 	private config: OpenPanelServerConfig;
 	private initialized = false;
+	private initializePromise?: Promise<void>;
 
 	constructor(config: OpenPanelServerConfig) {
 		super({ debug: config.debug, enabled: config.enabled });
 		this.config = config;
 	}
 
-	initialize(): void {
-		if (!this.isEnabled() || this.initialized) return;
+	initialize(): Promise<void> {
+		if (!this.isEnabled() || this.initialized) return Promise.resolve();
+		if (this.initializePromise) return this.initializePromise;
+
+		this.initializePromise = this.initializeOpenPanel().catch((error) => {
+			this.initializePromise = undefined;
+			console.error(
+				`[OpenPanel-Server] Failed to initialize (${this.getErrorClass(error)})`,
+			);
+			throw error;
+		});
+		return this.initializePromise;
+	}
+
+	private async initializeOpenPanel(): Promise<void> {
 		if (!this.config.clientId || typeof this.config.clientId !== "string") {
 			throw new Error("OpenPanel requires a clientId");
 		}
@@ -39,19 +76,24 @@ export class OpenPanelServerProvider extends BaseAnalyticsProvider {
 			throw new Error("OpenPanel requires a clientSecret on the server");
 		}
 
+		let OpenPanelClient: typeof import("@openpanel/sdk").OpenPanel;
 		try {
-			const { enabled, ...options } = this.config;
-			void enabled;
-
-			this.client = new OpenPanel(options);
-			this.initialized = true;
-			this.log("Initialized successfully");
+			({ OpenPanel: OpenPanelClient } = await import("@openpanel/sdk"));
 		} catch (error) {
-			console.error(
-				`[OpenPanel-Server] Failed to initialize (${this.getErrorClass(error)})`,
-			);
+			if (isMissingPackageError(error, "@openpanel/sdk")) {
+				throw new Error(
+					"OpenPanel server provider requires the optional peer package @openpanel/sdk",
+				);
+			}
 			throw error;
 		}
+
+		const { enabled, ...options } = this.config;
+		void enabled;
+
+		this.client = new OpenPanelClient(options);
+		this.initialized = true;
+		this.log("Initialized successfully");
 	}
 
 	async identify(
@@ -124,6 +166,7 @@ export class OpenPanelServerProvider extends BaseAnalyticsProvider {
 		client.clear();
 		this.client = undefined;
 		this.initialized = false;
+		this.initializePromise = undefined;
 		this.log("Shutdown complete");
 	}
 }

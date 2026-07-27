@@ -30,7 +30,7 @@ describe("OpenPanelServerProvider", () => {
 		sdk.identify.mockResolvedValue(null);
 	});
 
-	it("initializes synchronously once with authenticated server options", () => {
+	it("initializes once with authenticated server options", async () => {
 		const filter = vi.fn(() => true);
 		const provider = new OpenPanelServerProvider({
 			clientId: "client-id",
@@ -40,8 +40,8 @@ describe("OpenPanelServerProvider", () => {
 			filter,
 		});
 
-		provider.initialize();
-		provider.initialize();
+		await provider.initialize();
+		await provider.initialize();
 
 		expect(provider.name).toBe("OpenPanel-Server");
 		expect(constructorSpy).toHaveBeenCalledTimes(1);
@@ -54,21 +54,21 @@ describe("OpenPanelServerProvider", () => {
 		});
 	});
 
-	it("validates both credentials and respects disabled mode", () => {
-		expect(() =>
+	it("validates both credentials and respects disabled mode", async () => {
+		await expect(
 			new OpenPanelServerProvider({
 				clientId: "",
 				clientSecret: "secret",
 			}).initialize(),
-		).toThrow("clientId");
-		expect(() =>
+		).rejects.toThrow("clientId");
+		await expect(
 			new OpenPanelServerProvider({
 				clientId: "client-id",
 				clientSecret: "",
 			}).initialize(),
-		).toThrow("clientSecret");
+		).rejects.toThrow("clientSecret");
 
-		new OpenPanelServerProvider({
+		await new OpenPanelServerProvider({
 			clientId: "client-id",
 			clientSecret: "secret",
 			enabled: false,
@@ -215,5 +215,37 @@ describe("OpenPanelServerProvider", () => {
 			page: { path: "/docs", title: "Docs" },
 		});
 		expect(sdk.clear).toHaveBeenCalledTimes(2);
+	});
+
+	it("coalesces concurrent initialization and retries after a rejected initializer", async () => {
+		const initializationError = new Error("first initialization failed");
+		constructorSpy.mockImplementationOnce(() => {
+			throw initializationError;
+		});
+		const provider = new OpenPanelServerProvider({
+			clientId: "client-id",
+			clientSecret: "client-secret",
+		});
+
+		const first = provider.initialize();
+		const concurrent = provider.initialize();
+
+		expect(first).toBe(concurrent);
+		await expect(first).rejects.toBe(initializationError);
+		await expect(provider.initialize()).resolves.toBeUndefined();
+		expect(constructorSpy).toHaveBeenCalledTimes(2);
+	});
+
+	it("can initialize a fresh client after shutdown", async () => {
+		const provider = new OpenPanelServerProvider({
+			clientId: "client-id",
+			clientSecret: "client-secret",
+		});
+
+		await provider.initialize();
+		await provider.shutdown();
+		await provider.initialize();
+
+		expect(constructorSpy).toHaveBeenCalledTimes(2);
 	});
 });
