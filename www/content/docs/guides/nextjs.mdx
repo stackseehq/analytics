@@ -196,23 +196,25 @@ See [Identifying Users](/docs/core-concepts/identifying-users) for traits, typin
 
 ## Server analytics
 
-Use `trakoo/server` for events you cannot afford to lose to an ad-blocker — signups, payments, anything that must be recorded. It's stateless and edge-ready: pass user context with each call, and flush before the function returns.
+Use `trakoo/server` for events you cannot afford to lose to an ad-blocker — signups, payments, anything that must be recorded. It's stateless and edge-ready: pass user context with each call. These serverless examples give each invocation its own analytics/provider pair.
 
 ```typescript title="lib/server-analytics.ts"
 import { createServerAnalytics } from 'trakoo/server';
 import { PostHogServerProvider } from 'trakoo/providers/server';
 import { appEvents } from './events';
 
-export const serverAnalytics = createServerAnalytics({
-  events: appEvents,
-  providers: [
-    new PostHogServerProvider({
-      apiKey: process.env.POSTHOG_API_KEY!,
-      host: process.env.NEXT_PUBLIC_POSTHOG_HOST
-    })
-  ],
-  debug: process.env.NODE_ENV === 'development'
-});
+export function createRequestAnalytics() {
+  return createServerAnalytics({
+    events: appEvents,
+    providers: [
+      new PostHogServerProvider({
+        apiKey: process.env.POSTHOG_API_KEY!,
+        host: process.env.NEXT_PUBLIC_POSTHOG_HOST
+      })
+    ],
+    debug: process.env.NODE_ENV === 'development'
+  });
+}
 ```
 
 ### Track in server actions
@@ -220,7 +222,7 @@ export const serverAnalytics = createServerAnalytics({
 ```typescript title="app/actions.ts"
 'use server';
 
-import { serverAnalytics } from '@/lib/server-analytics';
+import { createRequestAnalytics } from '@/lib/server-analytics';
 import { revalidatePath } from 'next/cache';
 
 export async function createUser(formData: FormData) {
@@ -228,15 +230,18 @@ export async function createUser(formData: FormData) {
   const plan = formData.get('plan') as 'free' | 'pro' | 'enterprise';
 
   const user = await db.user.create({ data: { email, plan } });
+  const analytics = createRequestAnalytics();
 
-  await serverAnalytics.track('user_signed_up', { email, plan }, {
-    userId: user.id,
-    user: { email: user.email, traits: { plan } }
-  });
+  try {
+    await analytics.track('user_signed_up', { email, plan }, {
+      userId: user.id,
+      user: { email: user.email, traits: { plan } }
+    });
 
-  await serverAnalytics.shutdown();
-
-  revalidatePath('/dashboard');
+    revalidatePath('/dashboard');
+  } finally {
+    await analytics.shutdown();
+  }
 }
 ```
 
@@ -244,28 +249,31 @@ export async function createUser(formData: FormData) {
 
 ```typescript title="app/api/users/route.ts"
 import { NextResponse } from 'next/server';
-import { serverAnalytics } from '@/lib/server-analytics';
+import { createRequestAnalytics } from '@/lib/server-analytics';
 
 export async function POST(request: Request) {
   const body = await request.json();
   const user = await db.user.create({ data: body });
+  const analytics = createRequestAnalytics();
 
-  await serverAnalytics.track('user_signed_up', {
-    email: body.email,
-    plan: body.plan
-  }, {
-    userId: user.id,
-    user: { email: user.email, traits: { plan: user.plan } }
-  });
+  try {
+    await analytics.track('user_signed_up', {
+      email: body.email,
+      plan: body.plan
+    }, {
+      userId: user.id,
+      user: { email: user.email, traits: { plan: user.plan } }
+    });
 
-  await serverAnalytics.shutdown();
-
-  return NextResponse.json({ user });
+    return NextResponse.json({ user });
+  } finally {
+    await analytics.shutdown();
+  }
 }
 ```
 
-:::warning[Always flush on the server]
-Serverless functions terminate the moment they return, which can drop queued events. Call `shutdown()` before returning so providers can send everything they've buffered. This applies to server actions, route handlers, and the Edge runtime alike.
+:::note[Match shutdown to ownership]
+The invocation that creates a request-owned pair shuts it down in `finally`; provider shutdown may flush, clear, or close resources according to that provider's contract. A reusable process-owned pair shuts down only during process teardown, never after each request.
 :::
 
 For events that shouldn't block the response, hand the work to Vercel's `waitUntil` and shut down when it settles:
@@ -273,15 +281,16 @@ For events that shouldn't block the response, hand the work to Vercel's `waitUnt
 ```typescript title="app/api/data/route.ts"
 import { NextResponse } from 'next/server';
 import { waitUntil } from '@vercel/functions';
-import { serverAnalytics } from '@/lib/server-analytics';
+import { createRequestAnalytics } from '@/lib/server-analytics';
 
 export async function GET() {
   const data = await fetchData();
+  const analytics = createRequestAnalytics();
 
   waitUntil(
-    serverAnalytics
+    analytics
       .track('data_fetched', { count: data.length })
-      .then(() => serverAnalytics.shutdown())
+      .finally(() => analytics.shutdown())
   );
 
   return NextResponse.json(data);

@@ -3,7 +3,7 @@ title: Client vs Server
 description: When to track on the client, when to track on the server, and how the stateful and stateless APIs differ.
 ---
 
-trakoo ships two entry points: `trakoo/client` for the browser and `trakoo/server` for Node and edge runtimes. They share your event definitions but behave differently. The client is stateful and non-blocking; the server is stateless and must flush before the process exits. This page explains when to reach for each and how to use both together.
+trakoo ships two entry points: `trakoo/client` for the browser and `trakoo/server` for Node and edge runtimes. They share your event definitions but behave differently. The client is stateful and non-blocking; the server is stateless, while delivery and shutdown depend on instance ownership and provider behavior. This page explains when to reach for each and how to use both together.
 
 ## At a glance
 
@@ -14,7 +14,7 @@ trakoo ships two entry points: `trakoo/client` for the browser and `trakoo/serve
 | Logout | Call `reset()` | Nothing to reset |
 | Lifetime | Application-owned session instance | Application-owned request, worker, or process instance |
 | Delivery | Returns a promise; often handled in the background | Await critical events |
-| Shutdown | Not required | Required in serverless |
+| Shutdown | Not required | Match the pair's owner, runtime, and provider |
 
 ## When to use each
 
@@ -115,14 +115,37 @@ See the [Next.js](/docs/guides/nextjs) and [SvelteKit](/docs/guides/sveltekit) g
 
 ## Server-side tracking
 
-Import from `trakoo/server`. The server API is stateless, so create an instance per request or per worker rather than sharing one across users.
+Import from `trakoo/server`. The server API is stateless: user state is never retained between calls. Instance lifetime is a separate ownership decision based on the provider's behavior and the runtime's lifetime.
+
+<Tabs>
+<Tab title="Request-owned">
 
 ```typescript title="lib/server-analytics.ts"
 import { createServerAnalytics } from 'trakoo/server';
 import { PostHogServerProvider } from 'trakoo/providers/server';
 import { appEvents } from './events';
 
-export const serverAnalytics = createServerAnalytics({
+export function createRequestAnalytics() {
+  return createServerAnalytics({
+    events: appEvents,
+    providers: [
+      new PostHogServerProvider({ apiKey: process.env.POSTHOG_API_KEY! })
+    ]
+  });
+}
+```
+
+Each request creates a fresh analytics/provider pair, uses it inside `try`, and shuts down that same pair in `finally`.
+
+</Tab>
+<Tab title="Process-owned">
+
+```typescript title="lib/server-analytics.ts"
+import { createServerAnalytics } from 'trakoo/server';
+import { PostHogServerProvider } from 'trakoo/providers/server';
+import { appEvents } from './events';
+
+export const processAnalytics = createServerAnalytics({
   events: appEvents,
   providers: [
     new PostHogServerProvider({ apiKey: process.env.POSTHOG_API_KEY! })
@@ -130,14 +153,17 @@ export const serverAnalytics = createServerAnalytics({
 });
 ```
 
-Each call returns an independent instance bound to `appEvents`; choose its lifetime in application code. A long-running process may own one server instance because user context is supplied per event, while an isolated request or worker may create and shut down its own.
+A long-running application may own one stateless pair. Pass context on every call and shut it down only during application or process teardown, not after a request.
+
+</Tab>
+</Tabs>
 
 ### Stateless user context
 
 There is no `identify()` that persists. Pass the user with each event, because one instance may handle many users.
 
 ```typescript
-await serverAnalytics.track('api_request', {
+await processAnalytics.track('api_request', {
   endpoint: '/users',
   method: 'POST'
 }, {
@@ -149,7 +175,7 @@ await serverAnalytics.track('api_request', {
 });
 
 // A different request means a different user — pass context again.
-await serverAnalytics.track('api_request', {
+await processAnalytics.track('api_request', {
   endpoint: '/products',
   method: 'GET'
 }, {
@@ -163,13 +189,16 @@ await serverAnalytics.track('api_request', {
 For events you must not lose, await `track()` so it completes before you respond.
 
 ```typescript
+import { createRequestAnalytics } from '@/lib/server-analytics';
+
 export async function POST(req: Request) {
   const body = await req.json();
+  const analytics = createRequestAnalytics();
 
   try {
     const payment = await processPayment(body);
 
-    await serverAnalytics.track('payment_processed', {
+    await analytics.track('payment_processed', {
       amount: payment.amount,
       transactionId: payment.id
     }, {
@@ -178,44 +207,51 @@ export async function POST(req: Request) {
 
     return Response.json({ success: true });
   } finally {
-    await serverAnalytics.shutdown();
+    await analytics.shutdown();
   }
 }
 ```
 
 ### Shutdown in serverless
 
-Serverless platforms freeze or terminate a function the moment it returns. Providers often batch events and send them asynchronously, so anything still queued when the function ends is lost. Calling `shutdown()` flushes those queued events and closes connections before the runtime tears the function down.
+Serverless platforms may freeze or terminate a function after it returns. When a request owns its analytics/provider pair, shut that pair down before the request ends. The exact effect is provider-specific: shutdown may flush queued work, clear state, close resources, or combine those behaviors.
 
 ```typescript
+import { createRequestAnalytics } from '@/lib/server-analytics';
+
 export async function handler(req, res) {
-  await serverAnalytics.track('api_request', { endpoint: req.url });
+  const analytics = createRequestAnalytics();
 
-  await serverAnalytics.shutdown();
+  try {
+    await analytics.track('api_request', { endpoint: req.url });
 
-  return res.json({ success: true });
+    return res.json({ success: true });
+  } finally {
+    await analytics.shutdown();
+  }
 }
 ```
 
-:::warning[Always flush before the function exits]
-On Vercel, Netlify, AWS Lambda, and similar platforms, call `shutdown()` before returning. Without it, in-flight events may never reach your providers. Run it in a `finally` block so it fires even when the handler throws.
+:::note[Match shutdown to ownership]
+A request-owned pair shuts down in `finally`. A reusable process-owned pair shuts down only at process teardown. Review the provider's shutdown contract rather than assuming every provider buffers or that shutdown always flushes.
 :::
 
 ### Non-blocking with `waitUntil`
 
-For non-critical server events, respond first and let tracking finish in the background. Vercel's `waitUntil` keeps the function alive until the promise settles, which also lets you `shutdown()` after the flush.
+For non-critical server events, respond first and let tracking finish in the background. Vercel's `waitUntil` keeps the function alive until the promise settles, which also lets the scheduled task shut down its request-owned pair.
 
 ```typescript
 import { waitUntil } from '@vercel/functions';
-import { serverAnalytics } from '@/lib/server-analytics';
+import { createRequestAnalytics } from '@/lib/server-analytics';
 
 export async function GET(req: Request) {
   const result = await fetchData();
+  const analytics = createRequestAnalytics();
 
   waitUntil(
-    serverAnalytics
+    analytics
       .track('api_request', { endpoint: req.url })
-      .then(() => serverAnalytics.shutdown())
+      .finally(() => analytics.shutdown())
   );
 
   return Response.json(result);
@@ -230,8 +266,8 @@ Client and server often cover two halves of the same journey. The client capture
 // Client: the user clicked the signup button.
 await analytics.track('signup_button_clicked', { location: 'hero' });
 
-// Server: the account was actually created.
-await serverAnalytics.track('user_signed_up', {
+// Server: a process-owned instance records the authoritative outcome.
+await processAnalytics.track('user_signed_up', {
   email: user.email,
   plan: user.plan
 }, {
@@ -284,8 +320,8 @@ Schema validation may be asynchronous. If you start several `track()` calls conc
 ```typescript
 // Both start immediately; provider delivery order is not guaranteed.
 await Promise.all([
-  serverAnalytics.track('first_event', firstInput),
-  serverAnalytics.track('second_event', secondInput)
+  processAnalytics.track('first_event', firstInput),
+  processAnalytics.track('second_event', secondInput)
 ]);
 ```
 
@@ -299,18 +335,21 @@ When order matters, await each call before starting the next. Validation failure
 ```typescript title="app/actions.ts"
 'use server';
 
-import { serverAnalytics } from '@/lib/server-analytics';
+import { createRequestAnalytics } from '@/lib/server-analytics';
 
 export async function createUser(formData: FormData) {
   const user = await register(formData.get('email') as string);
+  const analytics = createRequestAnalytics();
 
-  await serverAnalytics.track('user_signed_up', {
-    email: user.email
-  }, {
-    userId: user.id
-  });
-
-  await serverAnalytics.shutdown();
+  try {
+    await analytics.track('user_signed_up', {
+      email: user.email
+    }, {
+      userId: user.id
+    });
+  } finally {
+    await analytics.shutdown();
+  }
 }
 ```
 
@@ -318,21 +357,24 @@ export async function createUser(formData: FormData) {
 <Tab title="SvelteKit endpoint">
 
 ```typescript title="src/routes/api/signup/+server.ts"
-import { serverAnalytics } from '$lib/server-analytics';
+import { createRequestAnalytics } from '$lib/server-analytics';
 import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = async ({ request }) => {
   const body = await request.json();
+  const analytics = createRequestAnalytics();
 
-  await serverAnalytics.track('user_signed_up', {
-    email: body.email
-  }, {
-    userId: body.userId
-  });
+  try {
+    await analytics.track('user_signed_up', {
+      email: body.email
+    }, {
+      userId: body.userId
+    });
 
-  await serverAnalytics.shutdown();
-
-  return new Response('OK');
+    return new Response('OK');
+  } finally {
+    await analytics.shutdown();
+  }
 };
 ```
 
@@ -340,19 +382,23 @@ export const POST: RequestHandler = async ({ request }) => {
 <Tab title="API route">
 
 ```typescript title="pages/api/users.ts"
-import { serverAnalytics } from '@/lib/server-analytics';
+import { createRequestAnalytics } from '@/lib/server-analytics';
 import type { NextApiRequest, NextApiResponse } from 'next';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  await serverAnalytics.track('user_created', {
-    email: req.body.email
-  }, {
-    userId: req.body.userId
-  });
+  const analytics = createRequestAnalytics();
 
-  await serverAnalytics.shutdown();
+  try {
+    await analytics.track('user_created', {
+      email: req.body.email
+    }, {
+      userId: req.body.userId
+    });
 
-  res.status(200).json({ success: true });
+    res.status(200).json({ success: true });
+  } finally {
+    await analytics.shutdown();
+  }
 }
 ```
 

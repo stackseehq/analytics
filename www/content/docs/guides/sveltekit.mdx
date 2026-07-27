@@ -180,7 +180,7 @@ See [Identifying Users](/docs/core-concepts/identifying-users) for traits and ty
 
 ## Server analytics
 
-Server analytics is stateless and edge-ready: pass user context with each call, and flush before the request finishes. Create one instance from private env vars.
+Server analytics is stateless and edge-ready: pass user context with each call. For the serverless pattern shown here, create one request-owned instance from private env vars.
 
 ```typescript title="src/lib/server-analytics.ts"
 import { createServerAnalytics } from 'trakoo/server';
@@ -189,32 +189,34 @@ import { POSTHOG_API_KEY } from '$env/static/private';
 import { PUBLIC_POSTHOG_HOST } from '$env/static/public';
 import { appEvents } from './events';
 
-export const serverAnalytics = createServerAnalytics({
-  events: appEvents,
-  providers: [
-    new PostHogServerProvider({
-      apiKey: POSTHOG_API_KEY,
-      host: PUBLIC_POSTHOG_HOST
-    })
-  ],
-  debug: import.meta.env.DEV
-});
+export function createRequestAnalytics() {
+  return createServerAnalytics({
+    events: appEvents,
+    providers: [
+      new PostHogServerProvider({
+        apiKey: POSTHOG_API_KEY,
+        host: PUBLIC_POSTHOG_HOST
+      })
+    ],
+    debug: import.meta.env.DEV
+  });
+}
 ```
 
 :::note
 Import secrets from `$env/static/private` and public values from `$env/static/public`. SvelteKit keeps them separate: anything prefixed with `PUBLIC_` is only available from `$env/static/public`.
 :::
 
-:::warning[Always flush on the server]
-Serverless and edge functions can freeze or exit as soon as the response is sent. Call `serverAnalytics.shutdown()` before returning so providers can send queued events, or you'll lose them.
+:::note[Match shutdown to ownership]
+The request that creates an analytics/provider pair shuts down that same pair in `finally`. Provider shutdown may flush, clear, or close resources according to its contract. A reusable process-owned pair shuts down only during process teardown, never after each request.
 :::
 
 ### Load functions and actions
 
-Track wherever the server does meaningful work. Load functions, form actions, and API endpoints all follow the same shape: `track(event, properties, context)`, then `shutdown()`.
+Track wherever the server does meaningful work. Load functions, form actions, and API endpoints all create a local pair, track inside `try`, and shut down in `finally`.
 
 ```typescript title="src/routes/signup/+page.server.ts"
-import { serverAnalytics } from '$lib/server-analytics';
+import { createRequestAnalytics } from '$lib/server-analytics';
 import { fail, redirect } from '@sveltejs/kit';
 import type { Actions } from './$types';
 
@@ -229,41 +231,49 @@ export const actions: Actions = {
     }
 
     const user = await db.user.create({ data: { email, plan } });
+    const analytics = createRequestAnalytics();
 
-    await serverAnalytics.track('user_signed_up', { email, plan }, {
-      userId: user.id,
-      user: { email: user.email, traits: { plan } }
-    });
+    try {
+      await analytics.track('user_signed_up', { email, plan }, {
+        userId: user.id,
+        user: { email: user.email, traits: { plan } }
+      });
 
-    await serverAnalytics.shutdown();
-
-    throw redirect(303, '/dashboard');
+      throw redirect(303, '/dashboard');
+    } finally {
+      await analytics.shutdown();
+    }
   }
 };
 ```
+
+The redirect is thrown from inside `try`, so `finally` shuts down the local pair before it propagates. There is no `catch` block that could swallow the redirect.
 
 An API endpoint looks the same:
 
 ```typescript title="src/routes/api/users/+server.ts"
 import { json } from '@sveltejs/kit';
-import { serverAnalytics } from '$lib/server-analytics';
+import { createRequestAnalytics } from '$lib/server-analytics';
 import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = async ({ request }) => {
   const body = await request.json();
   const user = await db.user.create({ data: body });
+  const analytics = createRequestAnalytics();
 
-  await serverAnalytics.track('user_signed_up', {
-    email: body.email,
-    plan: body.plan
-  }, {
-    userId: user.id,
-    user: { email: user.email, traits: { plan: user.plan } }
-  });
+  try {
+    await analytics.track('user_signed_up', {
+      email: body.email,
+      plan: body.plan
+    }, {
+      userId: user.id,
+      user: { email: user.email, traits: { plan: user.plan } }
+    });
 
-  await serverAnalytics.shutdown();
-
-  return json({ user });
+    return json({ user });
+  } finally {
+    await analytics.shutdown();
+  }
 };
 ```
 
@@ -289,19 +299,23 @@ export function getUserContext(event: RequestEvent) {
 ```
 
 ```typescript title="src/routes/profile/+page.server.ts"
-import { serverAnalytics } from '$lib/server-analytics';
+import { createRequestAnalytics } from '$lib/server-analytics';
 import { getUserContext } from '$lib/get-user-context';
 import type { PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async (event) => {
-  await serverAnalytics.track('page_viewed', {
-    path: '/profile',
-    title: 'Profile'
-  }, getUserContext(event));
+  const analytics = createRequestAnalytics();
 
-  await serverAnalytics.shutdown();
+  try {
+    await analytics.track('page_viewed', {
+      path: '/profile',
+      title: 'Profile'
+    }, getUserContext(event));
 
-  return { user: event.locals.user };
+    return { user: event.locals.user };
+  } finally {
+    await analytics.shutdown();
+  }
 };
 ```
 
@@ -310,7 +324,7 @@ export const load: PageServerLoad = async (event) => {
 `hooks.server.ts` is a good place to populate the user from a session and track server-wide events such as API requests.
 
 ```typescript title="src/hooks.server.ts"
-import { serverAnalytics } from '$lib/server-analytics';
+import { createRequestAnalytics } from '$lib/server-analytics';
 import { getUserContext } from '$lib/get-user-context';
 import type { Handle } from '@sveltejs/kit';
 
@@ -321,12 +335,18 @@ export const handle: Handle = async ({ event, resolve }) => {
   }
 
   if (event.url.pathname.startsWith('/api/')) {
-    await serverAnalytics.track('api_request', {
-      path: event.url.pathname,
-      method: event.request.method
-    }, getUserContext(event));
+    const analytics = createRequestAnalytics();
 
-    await serverAnalytics.shutdown();
+    try {
+      await analytics.track('api_request', {
+        path: event.url.pathname,
+        method: event.request.method
+      }, getUserContext(event));
+
+      return await resolve(event);
+    } finally {
+      await analytics.shutdown();
+    }
   }
 
   return resolve(event);
@@ -369,24 +389,28 @@ With `use:enhance` you can track the submission client-side while the action rec
 
 ## Deployment
 
-The server instance runs on Node and edge adapters alike, and the rule is the same on both: flush before the response returns.
+Request-owned analytics runs on Node and edge adapters alike. In both cases, shut down the local pair in `finally` before the request ends.
 
 ```typescript title="src/routes/api/edge/+server.ts"
 import { json } from '@sveltejs/kit';
-import { serverAnalytics } from '$lib/server-analytics';
+import { createRequestAnalytics } from '$lib/server-analytics';
 import type { RequestHandler } from './$types';
 
 export const config = { runtime: 'edge' };
 
 export const GET: RequestHandler = async () => {
-  await serverAnalytics.track('api_request', {
-    path: '/api/edge',
-    method: 'GET'
-  });
+  const analytics = createRequestAnalytics();
 
-  await serverAnalytics.shutdown();
+  try {
+    await analytics.track('api_request', {
+      path: '/api/edge',
+      method: 'GET'
+    });
 
-  return json({ ok: true });
+    return json({ ok: true });
+  } finally {
+    await analytics.shutdown();
+  }
 };
 ```
 

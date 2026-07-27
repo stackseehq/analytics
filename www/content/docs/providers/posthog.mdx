@@ -72,25 +72,41 @@ import { createServerAnalytics } from "trakoo/server";
 import { PostHogServerProvider } from "trakoo/providers/server";
 import { appEvents } from "@/lib/events";
 
-export const serverAnalytics = createServerAnalytics({
-  events: appEvents,
-  providers: [
-    new PostHogServerProvider({
-      apiKey: process.env.POSTHOG_API_KEY!,
-      host: "https://us.i.posthog.com",
-    }),
-  ],
-});
+export function createRequestAnalytics() {
+  return createServerAnalytics({
+    events: appEvents,
+    providers: [
+      new PostHogServerProvider({
+        apiKey: process.env.POSTHOG_API_KEY!,
+        host: "https://us.i.posthog.com",
+      }),
+    ],
+  });
+}
+```
 
-await serverAnalytics.track(
-  "user_signed_up",
-  {
-    plan: "pro",
-  },
-  {
-    userId: "user_123",
-  },
-);
+```typescript title="app/api/signup/route.ts"
+import { createRequestAnalytics } from "@/lib/server-analytics";
+
+export async function POST() {
+  const analytics = createRequestAnalytics();
+
+  try {
+    await analytics.track(
+      "user_signed_up",
+      {
+        plan: "pro",
+      },
+      {
+        userId: "user_123",
+      },
+    );
+
+    return Response.json({ ok: true });
+  } finally {
+    await analytics.shutdown();
+  }
+}
 ```
 
 For server `pageView` calls, PostHog uses `context.user.userId` as the distinct
@@ -99,8 +115,8 @@ page view as anonymous. Server identity is never retained between calls, so
 include the relevant user context on every page view that should be attributed
 to a user.
 
-:::warning[Always flush on the server]
-The Node SDK queues events and sends them in batches. In serverless or edge functions, call `serverAnalytics.shutdown()` before the function returns so queued events are not lost. See [Client vs Server](/docs/core-concepts/client-vs-server) for the full picture.
+:::warning[Match shutdown to PostHog ownership]
+PostHog's Node client queues events. A request-owned client must shut down before its request finishes so its queue can be delivered. A reusable process-owned client shuts down only during process teardown, never after each request. See [Client vs Server](/docs/core-concepts/client-vs-server) for the full picture.
 :::
 
 ## Configuration

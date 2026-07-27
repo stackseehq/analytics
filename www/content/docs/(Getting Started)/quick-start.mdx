@@ -214,22 +214,25 @@ import { createServerAnalytics } from 'trakoo/server';
 import { PostHogServerProvider } from 'trakoo/providers/server';
 import { appEvents } from './events';
 
-export const serverAnalytics = createServerAnalytics({
-  events: appEvents,
-  providers: [
-    new PostHogServerProvider({ apiKey: process.env.POSTHOG_API_KEY! })
-  ]
-});
+export function createRequestAnalytics() {
+  return createServerAnalytics({
+    events: appEvents,
+    providers: [
+      new PostHogServerProvider({ apiKey: process.env.POSTHOG_API_KEY! })
+    ]
+  });
+}
 ```
 
 ```typescript title="app/api/signup/route.ts"
-import { serverAnalytics } from '@/lib/server-analytics';
+import { createRequestAnalytics } from '@/lib/server-analytics';
 
 export async function POST(request: Request) {
   const user = await createUser(await request.json());
+  const analytics = createRequestAnalytics();
 
   try {
-    await serverAnalytics.track('user_signed_up', {
+    await analytics.track('user_signed_up', {
       email: user.email,
       plan: user.plan
     }, {
@@ -239,13 +242,13 @@ export async function POST(request: Request) {
 
     return Response.json({ ok: true });
   } finally {
-    await serverAnalytics.shutdown();
+    await analytics.shutdown();
   }
 }
 ```
 
-:::warning[Flush on the server]
-In serverless environments, call `shutdown()` before the function exits so providers can send queued events.
+:::note[Match shutdown to ownership]
+A request-scoped analytics/provider pair shuts down in `finally`, before its request ends. A reusable instance shuts down only during application or process teardown. Check each provider's contract: shutdown may flush queued work, clear state, close resources, or combine those behaviors.
 :::
 
 ## Runtime validation is optional
