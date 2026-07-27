@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import {
+	existsSync,
 	mkdtempSync,
 	readFileSync,
 	rmSync,
@@ -11,13 +12,19 @@ import { fileURLToPath } from "node:url";
 import { assertRootBundleNeutral } from "./package-verification.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const consumerDirectory = mkdtempSync(
-	join(tmpdir(), "trakoo-package-consumer-"),
-);
-let tarballPath;
+const invokedAsScript =
+	process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 
 const run = (command, args, cwd = root) =>
 	execFileSync(command, args, { cwd, encoding: "utf8", stdio: "pipe" });
+
+export function assertDeclarationTargetsExist(distDirectory, relativeTargets) {
+	for (const relativeTarget of relativeTargets) {
+		if (!existsSync(join(distDirectory, relativeTarget))) {
+			throw new Error(`missing declaration target ${relativeTarget}`);
+		}
+	}
+}
 
 const consumerSource = String.raw`
 import { defineEvents, noProperties, typed } from "trakoo";
@@ -27,6 +34,10 @@ import {
 	type ClientAnalyticsConfig,
 	type EventInputMap as ClientEventInputMap,
 } from "trakoo/client";
+import {
+	createServerAnalytics,
+	type ServerAnalyticsConfig,
+} from "trakoo/server";
 
 const events = defineEvents({
 	clicked: {
@@ -45,14 +56,31 @@ const analytics = createClientAnalytics({ events, providers: [] });
 analytics.track("clicked", { id: "cta" });
 analytics.track("started");
 
+const serverAnalytics = createServerAnalytics({ events, providers: [] });
+await serverAnalytics.track("clicked", { id: "server-cta" });
+await serverAnalytics.track("started");
+
 type ClickInput = ClientEventInputMap<typeof events>["clicked"];
 void ({} as ClientAnalyticsConfig<typeof events>);
+void ({} as ServerAnalyticsConfig<typeof events>);
 void ({} as ClickInput);
 void ClientValidationError;
 `;
 
-try {
+if (invokedAsScript) {
+	const consumerDirectory = mkdtempSync(
+		join(tmpdir(), "trakoo-package-consumer-"),
+	);
+	let tarballPath;
+
+	try {
 	run("pnpm", ["build"]);
+	assertDeclarationTargetsExist(join(root, "dist"), [
+		"index.d.ts",
+		"client/index.d.ts",
+		"server/index.d.ts",
+		"adapters/server/server-analytics.d.ts",
+	]);
 	const packResult = JSON.parse(run("npm", ["pack", "--json"]));
 	tarballPath = resolve(root, packResult[0].filename);
 
@@ -74,6 +102,8 @@ try {
 					target: "ES2022",
 					module: "ESNext",
 					moduleResolution: "Bundler",
+					moduleDetection: "force",
+					skipLibCheck: true,
 				},
 				include: ["consumer.ts"],
 			},
@@ -174,7 +204,8 @@ defineEvents({
 		["--input-type=module", "--eval", 'await import("trakoo")'],
 		consumerDirectory,
 	);
-} finally {
-	if (tarballPath) rmSync(tarballPath, { force: true });
-	rmSync(consumerDirectory, { recursive: true, force: true });
+	} finally {
+		if (tarballPath) rmSync(tarballPath, { force: true });
+		rmSync(consumerDirectory, { recursive: true, force: true });
+	}
 }

@@ -86,8 +86,7 @@ interface NormalizedProviderConfig {
 export class ServerAnalytics<
 	TRegistry extends EventRegistry<EventDefinitions>,
 	TUserTraits extends object = Record<string, unknown>,
-> implements ServerAnalyticsReplayAccess<TUserTraits>
-{
+> {
 	private providerConfigs: NormalizedProviderConfig[] = [];
 	private initialized = false;
 	private readonly registry: TRegistry;
@@ -137,6 +136,17 @@ export class ServerAnalytics<
 		this.enabled = config.enabled !== false;
 		this.defaultContext = config.defaultContext;
 		this.providerConfigs = this.normalizeProviders(config.providers);
+
+		const replay: ServerAnalyticsReplayAccess<TUserTraits>[typeof serverAnalyticsReplay] =
+			async (eventName, properties, options) => {
+				await this.replayProxyEvent(eventName, properties, options);
+			};
+		Object.defineProperty(this, serverAnalyticsReplay, {
+			value: replay,
+			enumerable: false,
+			configurable: false,
+			writable: false,
+		});
 	}
 
 	/**
@@ -633,7 +643,7 @@ export class ServerAnalytics<
 	 * properties are the client's post-transform validator output, so they
 	 * are resolved via `resolveReplayEvent` instead of being re-validated.
 	 */
-	async [serverAnalyticsReplay](
+	private async replayProxyEvent(
 		eventName: string,
 		properties: unknown,
 		options: ServerTrackOptions<TUserTraits> | undefined,
