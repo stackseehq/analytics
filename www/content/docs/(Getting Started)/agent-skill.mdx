@@ -1,0 +1,116 @@
+---
+title: Agent Skill
+description: Install the trakoo agent skill with the skills CLI so your coding agent follows trakoo's event, provider, and client/server conventions.
+sidebar:
+  label: Agent Skill
+---
+
+trakoo ships an [Agent Skill](https://www.skills.sh/docs): a set of instructions your coding agent loads when it works on analytics code. It teaches the agent how to define a shared event registry, where the browser/server boundary sits, how to configure each provider, and how to wire trakoo into Next.js, SvelteKit, TanStack Start, or Astro.
+
+The skill lives in this repository at [`skills/trakoo/SKILL.md`](https://github.com/multiplehats/trakoo/blob/main/skills/trakoo/SKILL.md) and uses the portable `SKILL.md` format, so it works with any agent the `skills` CLI supports — Claude Code, Codex, Cursor, and others.
+
+## Install
+
+Run the CLI from your project root:
+
+<Tabs>
+<Tab title="npm">
+
+```bash
+npx skills add multiplehats/trakoo --skill trakoo
+```
+
+</Tab>
+<Tab title="pnpm">
+
+```bash
+pnpm dlx skills add multiplehats/trakoo --skill trakoo
+```
+
+</Tab>
+<Tab title="bun">
+
+```bash
+bunx skills add multiplehats/trakoo --skill trakoo
+```
+
+</Tab>
+</Tabs>
+
+`--skill trakoo` selects the skill by name, so the CLI installs only this one instead of prompting for everything in the repository. The CLI then asks which agents to install it for and writes the skill into that agent's project directory — `.claude/skills/trakoo/` for Claude Code, for example.
+
+Skip the prompt by naming the agent yourself:
+
+```bash
+npx skills add multiplehats/trakoo --skill trakoo --agent claude-code
+```
+
+Install it once for every project on your machine with `--global`, which writes to your home directory instead of the current repository:
+
+```bash
+npx skills add multiplehats/trakoo --skill trakoo --global
+```
+
+:::note[Project or global?]
+Install per project when your team should share the same trakoo conventions through version control. Install globally when you want the skill available in every repository you touch, including ones that don't use trakoo yet.
+:::
+
+## Manage the skill
+
+```bash
+# See what's installed and where
+npx skills list
+
+# Pull the latest version of the skill
+npx skills update
+
+# Uninstall it
+npx skills remove trakoo
+```
+
+See the [skills CLI reference](https://www.skills.sh/docs/cli) for the full set of commands and flags.
+
+## Install manually
+
+If your agent isn't covered by the CLI, copy the skill directory into wherever that agent reads skills from:
+
+```bash
+git clone https://github.com/multiplehats/trakoo.git /tmp/trakoo
+cp -R /tmp/trakoo/skills/trakoo .claude/skills/trakoo
+```
+
+Keep the directory intact — `SKILL.md` links to the reference files next to it, and the agent reads them on demand.
+
+## What the agent gets
+
+| File | The agent reads it when |
+|------|-------------------------|
+| `SKILL.md` | Always. Covers the shared event registry, the client and server modules, import boundaries, identity lifecycle, and verification steps. |
+| `references/events-and-validation.md` | Defining events, adding a Standard Schema validator like Zod, or handling validation failures. |
+| `references/providers.md` | Choosing providers, routing events, using the Proxy, or writing a custom provider. |
+| `references/frameworks.md` | Integrating with Next.js, SvelteKit, TanStack Start, Astro, or a framework-neutral setup. |
+
+## Using it
+
+Agents load a skill based on its description, so you don't need to invoke it by name. Describe the work and the agent picks it up:
+
+> Track a `purchase_completed` event from our Stripe webhook handler and send it to PostHog.
+
+The skill tells the agent to inspect your project first — package manager, framework, installed trakoo version, and existing entry points — and to treat the trakoo declarations installed in your `node_modules` as the source of truth. If your installed version disagrees with the skill, the agent should surface the mismatch rather than invent an API.
+
+## Next steps
+
+<CardGroup>
+  <Card title="Installation" href="/docs/installation" icon="download">
+    Install the core package and the SDKs each provider needs.
+  </Card>
+  <Card title="Quick Start" href="/docs/quick-start" icon="rocket">
+    Go from install to your first tracked event in a few minutes.
+  </Card>
+  <Card title="Client vs Server" href="/docs/core-concepts/client-vs-server" icon="server">
+    Understand the boundary the skill enforces.
+  </Card>
+  <Card title="Framework Guides" href="/docs/guides/nextjs" icon="code">
+    Wire trakoo into Next.js or SvelteKit end to end.
+  </Card>
+</CardGroup>
