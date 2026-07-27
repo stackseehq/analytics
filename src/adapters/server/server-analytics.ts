@@ -18,22 +18,9 @@ import {
 	AnalyticsValidationError,
 	applyValidationFailurePolicy,
 	resolveEvent,
-	resolveReplayEvent,
 	type ResolvedEvent,
 	type ValidationConfig,
 } from "@/core/events/validation.js";
-
-export const serverAnalyticsReplay: unique symbol = Symbol(
-	"trakoo.serverAnalytics.replay",
-);
-
-export interface ServerAnalyticsReplayAccess<TUserTraits extends object> {
-	readonly [serverAnalyticsReplay]: (
-		eventName: string,
-		properties: unknown,
-		options: ServerTrackOptions<TUserTraits> | undefined,
-	) => Promise<void>;
-}
 
 export interface ServerTrackOptions<TUserTraits extends object> {
 	readonly userId?: string;
@@ -137,17 +124,6 @@ export class ServerAnalytics<
 		this.enabled = config.enabled !== false;
 		this.defaultContext = config.defaultContext;
 		this.providerConfigs = this.normalizeProviders(config.providers);
-
-		const replay: ServerAnalyticsReplayAccess<TUserTraits>[typeof serverAnalyticsReplay] =
-			async (eventName, properties, options) => {
-				await this.replayProxyEvent(eventName, properties, options);
-			};
-		Object.defineProperty(this, serverAnalyticsReplay, {
-			value: replay,
-			enumerable: false,
-			configurable: false,
-			writable: false,
-		});
 	}
 
 	/**
@@ -666,34 +642,8 @@ export class ServerAnalytics<
 	}
 
 	/**
-	 * Replays an already-validated proxy event through the shared dispatch
-	 * path. Internal entry point used by `ingestProxyEvents`; the replayed
-	 * properties are the client's post-transform validator output, so they
-	 * are resolved via `resolveReplayEvent` instead of being re-validated.
-	 */
-	private async replayProxyEvent(
-		eventName: string,
-		properties: unknown,
-		options: ServerTrackOptions<TUserTraits> | undefined,
-	): Promise<void> {
-		if (!this.enabled) return;
-		if (!this.initialized) await this.ensureInitialized();
-
-		const resolved = await resolveReplayEvent(
-			this.registry,
-			eventName as EventName<TRegistry>,
-			properties,
-			this.validation,
-			this.debug,
-		);
-		if (!resolved) return;
-
-		await this.dispatchResolvedEvent(resolved, options);
-	}
-
-	/**
-	 * Shared dispatch tail for track() and the proxy replay entry point:
-	 * builds the BaseEvent, merges context, and fans out to providers.
+	 * Shared dispatch tail for track(): builds the BaseEvent, merges context,
+	 * and fans out to providers.
 	 */
 	private async dispatchResolvedEvent<TName extends EventName<TRegistry>>(
 		resolved: ResolvedEvent<TRegistry, TName>,
@@ -708,12 +658,36 @@ export class ServerAnalytics<
 			sessionId: options?.sessionId,
 		};
 
+		const eventContext = options?.context;
+		const page =
+			eventContext && Object.hasOwn(eventContext, "page")
+				? eventContext.page
+				: this.defaultContext?.page;
+		const device =
+			eventContext && Object.hasOwn(eventContext, "device")
+				? eventContext.device
+				: this.defaultContext?.device;
+		const utm =
+			eventContext && Object.hasOwn(eventContext, "utm")
+				? eventContext.utm
+				: this.defaultContext?.utm;
+		const server =
+			eventContext && Object.hasOwn(eventContext, "server")
+				? eventContext.server
+				: this.defaultContext?.server;
 		const context: EventContext<TUserTraits> = {
-			...this.defaultContext,
-			...options?.context,
-			user:
-				options?.user ?? options?.context?.user ?? this.defaultContext?.user,
+			...(page ? { page } : {}),
+			...(device ? { device } : {}),
+			...(utm ? { utm } : {}),
+			...(server ? { server } : {}),
 		};
+		const user =
+			options && Object.hasOwn(options, "user")
+				? options.user
+				: (options?.context?.user ?? this.defaultContext?.user);
+		if (user !== undefined) {
+			context.user = user;
+		}
 
 		// Track with all providers in parallel (respecting method and event routing)
 		const trackPromises = this.providerConfigs

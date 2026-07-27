@@ -4,12 +4,10 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
 // Import from the built library (two levels up from e2e/test-app)
-const distPath = join(
-  dirname(fileURLToPath(import.meta.url)),
-  "../../dist"
-);
+const distPath = join(dirname(fileURLToPath(import.meta.url)), "../../dist");
 
 const { createServerAnalytics } = await import(`${distPath}/server.js`);
+const { defineEvents, typed } = await import(`${distPath}/index.js`);
 const { PirschServerProvider, ingestProxyEvents } = await import(
   `${distPath}/providers/server.js`
 );
@@ -72,7 +70,16 @@ const pirschProvider = new PirschServerProvider({
   disableBotFilter: true, // Allow test traffic through
 });
 
+const appEvents = defineEvents({
+  buttonClicked: {
+    name: "button_clicked",
+    category: "engagement",
+    properties: typed(),
+  },
+});
+
 const serverAnalytics = createServerAnalytics({
+  events: appEvents,
   providers: [pirschProvider],
   debug: true,
   enabled: true,
@@ -94,7 +101,15 @@ app.post("/api/analytics", async (req, res) => {
       body: JSON.stringify(req.body),
     });
 
-    await ingestProxyEvents(webRequest, serverAnalytics);
+    await ingestProxyEvents(webRequest, serverAnalytics, {
+      resolveIdentity: () => ({
+        userId: "e2e-test-user",
+        user: {
+          email: "e2e-user@example.invalid",
+          traits: { fixture: "proxy-v2" },
+        },
+      }),
+    });
     res.status(200).json({ ok: true });
   } catch (error) {
     console.error("[Test Server] Error ingesting events:", error);
@@ -137,6 +152,15 @@ function getTestPage() {
     // We serve it from the dist directory
     const { ProxyProvider } = await import('/dist/providers/client.js');
     const { createClientAnalytics } = await import('/dist/client.js');
+    const { defineEvents, typed } = await import('/dist/index.js');
+
+    const appEvents = defineEvents({
+      buttonClicked: {
+        name: 'button_clicked',
+        category: 'engagement',
+        properties: typed(),
+      },
+    });
 
     const proxyProvider = new ProxyProvider({
       endpoint: '/api/analytics',
@@ -148,6 +172,7 @@ function getTestPage() {
     });
 
     const analytics = createClientAnalytics({
+      events: appEvents,
       providers: [proxyProvider],
       debug: true,
       enabled: true,
@@ -178,7 +203,10 @@ function getTestPage() {
 }
 
 // Serve dist files for client-side imports (must be registered before listen)
-app.use("/dist", express.static(join(dirname(fileURLToPath(import.meta.url)), "../../dist")));
+app.use(
+  "/dist",
+  express.static(join(dirname(fileURLToPath(import.meta.url)), "../../dist")),
+);
 
 const PORT = process.env.PORT || 3737;
 const server = createServer(app);

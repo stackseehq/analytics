@@ -4,6 +4,7 @@ import type {
 	EventContext,
 	ProviderConfigOrProvider,
 	ProviderMethod,
+	TrackInvocation,
 } from "@/core/events/types.js";
 import type {
 	ClientTrackArgs,
@@ -536,6 +537,8 @@ export class BrowserAnalytics<
 
 		const invocation = {
 			timestamp: Date.now(),
+			input: args.length > 1 ? (args as readonly unknown[])[1] : undefined,
+			inputProvided: args.length > 1,
 			userId: this.userId,
 			sessionId: this.sessionId,
 			userTraits: this.userTraits,
@@ -546,12 +549,11 @@ export class BrowserAnalytics<
 		await this.ensureInitialized();
 
 		const eventName = args[0];
-		const input = args.length > 1 ? (args as readonly unknown[])[1] : undefined;
 		const resolved = await resolveEvent(
 			this.registry,
 			eventName,
-			input,
-			args.length > 1,
+			invocation.input,
+			invocation.inputProvided,
 			this.validation,
 			this.debug,
 		);
@@ -594,6 +596,11 @@ export class BrowserAnalytics<
 					await config.provider.track(
 						event as BaseEvent,
 						contextWithUser as EventContext,
+						{
+							input: invocation.input,
+							inputProvided: invocation.inputProvided,
+							occurredAt: invocation.timestamp,
+						} satisfies TrackInvocation,
 					);
 				} catch (error) {
 					// Log error but don't throw - one provider failing shouldn't break others

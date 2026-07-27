@@ -127,10 +127,9 @@ interface ClassifiedRegisteredEvent {
 }
 
 /**
- * Shared registry lookup + classification plumbing for resolveEvent and
- * resolveReplayEvent. Applies the failure policy (and returns undefined)
- * for unknown events, hostile category/classification access, and
- * access_failure classifications.
+ * Shared registry lookup + classification plumbing for resolveEvent. Applies
+ * the failure policy (and returns undefined) for unknown events, hostile
+ * category/classification access, and access_failure classifications.
  */
 async function classifyRegisteredEvent<
 	R extends EventRegistry<EventDefinitions>,
@@ -285,65 +284,5 @@ export async function resolveEvent<
 		name: eventName,
 		category,
 		properties: output as EventOutputMap<R>[N],
-	};
-}
-
-/**
- * @internal Resolves a proxy-replayed event without re-running schema
- * validation; not part of the public API.
- *
- * Replayed proxy properties are the client-validated POST-TRANSFORM output of
- * the event's validator. Standard Schema validators only accept input, so
- * re-validating that output on the server would reject any transforming
- * schema (e.g. zod's `z.string().transform(Number)`). Schema-backed events
- * therefore only get a structural property-object check here.
- */
-export async function resolveReplayEvent<
-	R extends EventRegistry<EventDefinitions>,
-	N extends EventName<R>,
->(
-	registry: R,
-	eventName: N,
-	rawProperties: unknown,
-	validation: ValidationConfig | undefined,
-	debug: boolean,
-): Promise<ResolvedEvent<R, N> | undefined> {
-	const classified = await classifyRegisteredEvent(
-		registry,
-		eventName,
-		validation,
-		debug,
-	);
-	if (!classified) return undefined;
-	const { category, classification } = classified;
-
-	if (classification.kind === "none") {
-		const isEmptyObject =
-			isPropertyObject(rawProperties) &&
-			Object.keys(rawProperties).length === 0;
-		if (rawProperties !== undefined && !isEmptyObject) {
-			return failInvalidProperties(eventName, validation, debug);
-		}
-		return {
-			name: eventName,
-			category,
-			properties: {} as EventOutputMap<R>[N],
-		};
-	}
-
-	if (classification.kind === "invalid") {
-		return failInvalidProperties(eventName, validation, debug);
-	}
-
-	// kind "type" or "schema": pass the replayed properties through as-is.
-	// For "schema" this deliberately skips the validator — see the note above.
-	if (!isPropertyObject(rawProperties)) {
-		return failInvalidProperties(eventName, validation, debug);
-	}
-
-	return {
-		name: eventName,
-		category,
-		properties: rawProperties as EventOutputMap<R>[N],
 	};
 }

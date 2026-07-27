@@ -25,5 +25,22 @@ export { EmitKitServerProvider } from "./emitkit/server.js";
 export type { EmitKitServerConfig } from "./emitkit/server.js";
 
 // Proxy helpers (for ingesting client-side events)
-export { ingestProxyEvents, createProxyHandler } from "./proxy/server.js";
-export type { IngestProxyEventsConfig } from "./proxy/server.js";
+export {
+	ingestProxyEvents,
+	createProxyHandler,
+	ProxyTrustError,
+} from "./proxy/server.js";
+export type {
+	IngestProxyEventsConfig,
+	ProxyTrustedIdentity,
+	ProxyTrustErrorCode,
+} from "./proxy/server.js";
+export type {
+	ProxyClientContext,
+	ProxyEventV2,
+	ProxyPayloadV2,
+	ProxyTrackEventV2,
+	ProxyIdentifyEventV2,
+	ProxyPageViewEventV2,
+	ProxyResetEventV2,
+} from "./proxy/types.js";

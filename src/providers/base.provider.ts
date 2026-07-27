@@ -2,6 +2,7 @@ import type {
 	AnalyticsProvider,
 	BaseEvent,
 	EventContext,
+	TrackInvocation,
 } from "@/core/events/types.js";
 
 export abstract class BaseAnalyticsProvider implements AnalyticsProvider {
@@ -24,6 +25,7 @@ export abstract class BaseAnalyticsProvider implements AnalyticsProvider {
 	abstract track(
 		event: BaseEvent,
 		context?: EventContext,
+		invocation?: TrackInvocation,
 	): Promise<void> | void;
 
 	abstract pageView(

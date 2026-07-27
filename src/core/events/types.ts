@@ -79,6 +79,12 @@ export interface EventContext<
 	server?: ServerContext;
 }
 
+export interface TrackInvocation {
+	readonly input: unknown;
+	readonly inputProvided: boolean;
+	readonly occurredAt: number;
+}
+
 export interface AnalyticsProvider {
 	name: string;
 	initialize(): Promise<void> | void;
@@ -86,7 +92,11 @@ export interface AnalyticsProvider {
 		userId: string,
 		traits?: Record<string, unknown>,
 	): Promise<void> | void;
-	track(event: BaseEvent, context?: EventContext): Promise<void> | void;
+	track(
+		event: BaseEvent,
+		context?: EventContext,
+		invocation?: TrackInvocation,
+	): Promise<void> | void;
 	pageView(
 		properties?: Record<string, unknown>,
 		context?: EventContext,

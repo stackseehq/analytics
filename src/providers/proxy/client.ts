@@ -1,9 +1,14 @@
-import type { BaseEvent, EventContext } from "@/core/events/types.js";
+import type {
+	BaseEvent,
+	EventContext,
+	TrackInvocation,
+} from "@/core/events/types.js";
 import { BaseAnalyticsProvider } from "@/providers/base.provider.js";
 import type {
 	ProxyBatchConfig,
-	ProxyEvent,
-	ProxyPayload,
+	ProxyClientContext,
+	ProxyEventV2,
+	ProxyPayloadV2,
 	ProxyRetryConfig,
 } from "./types.js";
 
@@ -42,7 +47,7 @@ export interface ProxyProviderConfig {
 export class ProxyProvider extends BaseAnalyticsProvider {
 	name = "Proxy";
 	private config: ProxyProviderConfig;
-	private queue: ProxyEvent[] = [];
+	private queue: ProxyEventV2[] = [];
 	private flushTimer?: ReturnType<typeof setTimeout>;
 	private readonly batchSize: number;
 	private readonly batchInterval: number;
@@ -91,13 +96,26 @@ export class ProxyProvider extends BaseAnalyticsProvider {
 		this.log("Queued identify event", { userId, traits });
 	}
 
-	async track(event: BaseEvent, context?: EventContext): Promise<void> {
+	async track(
+		event: BaseEvent,
+		context?: EventContext,
+		invocation?: TrackInvocation,
+	): Promise<void> {
 		if (!this.isEnabled()) return;
+		if (!invocation) {
+			throw new Error(
+				"ProxyProvider.track must be called through BrowserAnalytics so raw event input is available",
+			);
+		}
 
 		this.queueEvent({
 			type: "track",
-			event,
-			context: this.enrichContext(context),
+			name: event.action,
+			input: invocation.input,
+			inputProvided: invocation.inputProvided,
+			occurredAt: invocation.occurredAt,
+			sessionId: event.sessionId,
+			context: this.sanitizeClientContext(context),
 		});
 
 		this.log("Queued track event", { event, context });
@@ -109,7 +127,8 @@ export class ProxyProvider extends BaseAnalyticsProvider {
 		this.queueEvent({
 			type: "pageView",
 			properties,
-			context: this.enrichContext(context),
+			occurredAt: Date.now(),
+			context: this.sanitizeClientContext(context),
 		});
 
 		this.log("Queued page view event", { properties, context });
@@ -147,7 +166,7 @@ export class ProxyProvider extends BaseAnalyticsProvider {
 		await this.sendEvents(events, useBeacon);
 	}
 
-	private queueEvent(event: ProxyEvent): void {
+	private queueEvent(event: ProxyEventV2): void {
 		this.queue.push(event);
 
 		// Auto-flush if batch size reached
@@ -172,10 +191,10 @@ export class ProxyProvider extends BaseAnalyticsProvider {
 	}
 
 	private async sendEvents(
-		events: ProxyEvent[],
+		events: ProxyEventV2[],
 		useBeacon = false,
 	): Promise<void> {
-		const payload: ProxyPayload = { events };
+		const payload: ProxyPayloadV2 = { version: 2, events };
 
 		if (useBeacon && typeof navigator !== "undefined" && navigator.sendBeacon) {
 			// Use beacon for page unload (more reliable)
@@ -194,7 +213,7 @@ export class ProxyProvider extends BaseAnalyticsProvider {
 	}
 
 	private async sendWithRetry(
-		payload: ProxyPayload,
+		payload: ProxyPayloadV2,
 		attempt = 0,
 	): Promise<void> {
 		try {
@@ -235,41 +254,70 @@ export class ProxyProvider extends BaseAnalyticsProvider {
 		return this.retryInitialDelay * (attempt + 1);
 	}
 
-	private enrichContext(context?: EventContext): EventContext {
-		if (typeof window === "undefined") return context || {};
+	private sanitizeClientContext(context?: EventContext): ProxyClientContext {
+		const browser = typeof window !== "undefined";
+		const sourcePage = context?.page;
+		const pagePath =
+			sourcePage?.path ?? (browser ? window.location.pathname : undefined);
+		const page = pagePath
+			? {
+					path: pagePath,
+					title: sourcePage?.title ?? (browser ? document.title : undefined),
+					referrer:
+						sourcePage?.referrer ?? (browser ? document.referrer : undefined),
+					url: browser ? window.location.href : sourcePage?.url,
+					host: sourcePage?.host,
+					protocol: sourcePage?.protocol,
+					search: sourcePage?.search,
+				}
+			: undefined;
 
-		return {
-			...context,
-			page: {
-				path: window.location.pathname,
-				title: document.title,
-				referrer: document.referrer,
-				...context?.page,
-				// Additional fields for proxy (cast to any to bypass strict typing)
-				// biome-ignore lint/suspicious/noExplicitAny: Extended page context fields not in base type
-				...({ url: window.location.href } as any),
-			},
-			user: {
-				...context?.user,
-			},
-			device: {
-				...context?.device,
-				// Additional fields for proxy (cast to any to bypass strict typing)
-				...(({
-					userAgent: navigator.userAgent,
-					language: navigator.language,
-					timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-					screen: {
-						width: window.screen.width,
-						height: window.screen.height,
-					},
-					viewport: {
-						width: window.innerWidth,
-						height: window.innerHeight,
-					},
-				// biome-ignore lint/suspicious/noExplicitAny: Extended device context fields not in base type
-				}) as any),
-			},
-		};
+		const sourceUtm = context?.utm;
+		const utm = sourceUtm
+			? {
+					source: sourceUtm.source,
+					medium: sourceUtm.medium,
+					name: sourceUtm.name,
+				}
+			: undefined;
+
+		const sourceDevice = context?.device;
+		const device =
+			sourceDevice || browser
+				? {
+						type: sourceDevice?.type,
+						os: sourceDevice?.os,
+						browser: sourceDevice?.browser,
+						userAgent: browser ? navigator.userAgent : sourceDevice?.userAgent,
+						language: browser ? navigator.language : sourceDevice?.language,
+						timezone: browser
+							? Intl.DateTimeFormat().resolvedOptions().timeZone
+							: sourceDevice?.timezone,
+						screen: browser
+							? {
+									width: window.screen.width,
+									height: window.screen.height,
+								}
+							: sourceDevice?.screen
+								? {
+										width: sourceDevice.screen.width,
+										height: sourceDevice.screen.height,
+									}
+								: undefined,
+						viewport: browser
+							? {
+									width: window.innerWidth,
+									height: window.innerHeight,
+								}
+							: sourceDevice?.viewport
+								? {
+										width: sourceDevice.viewport.width,
+										height: sourceDevice.viewport.height,
+									}
+								: undefined,
+					}
+				: undefined;
+
+		return { page, utm, device };
 	}
 }

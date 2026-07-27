@@ -1,6 +1,23 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { z } from "zod";
+import { BrowserAnalytics } from "@/adapters/client/browser-analytics.js";
+import { defineEvents } from "@/core/events/index.js";
+import type { BaseEvent, EventContext } from "@/core/events/types.js";
 import { ProxyProvider } from "@/providers/proxy/client.js";
-import type { ProxyPayload } from "@/providers/proxy/types.js";
+import type { ProxyPayloadV2 } from "@/providers/proxy/types.js";
+import { MockAnalyticsProvider } from "./mock-provider.js";
+
+function trackWithInvocation(
+	provider: ProxyProvider,
+	event: BaseEvent,
+	context?: EventContext,
+): Promise<void> {
+	return provider.track(event, context, {
+		input: event.properties,
+		inputProvided: Object.hasOwn(event, "properties"),
+		occurredAt: event.timestamp ?? 1_234_567_890,
+	});
+}
 
 describe("ProxyProvider", () => {
 	let provider: ProxyProvider;
@@ -25,6 +42,7 @@ describe("ProxyProvider", () => {
 		// Mock window event listeners and properties
 		vi.stubGlobal("window", {
 			addEventListener: vi.fn(),
+			document: {},
 			location: {
 				pathname: "/test-page",
 				href: "https://example.com/test-page",
@@ -106,7 +124,7 @@ describe("ProxyProvider", () => {
 		});
 
 		it("should queue track events", async () => {
-			await provider.track({
+			await trackWithInvocation(provider, {
 				action: "test_event",
 				category: "test",
 				properties: { foo: "bar" },
@@ -150,17 +168,17 @@ describe("ProxyProvider", () => {
 			await provider.initialize();
 
 			// Add 3 events to trigger flush
-			await provider.track({
+			await trackWithInvocation(provider, {
 				action: "event1",
 				category: "test",
 				properties: {},
 			});
-			await provider.track({
+			await trackWithInvocation(provider, {
 				action: "event2",
 				category: "test",
 				properties: {},
 			});
-			await provider.track({
+			await trackWithInvocation(provider, {
 				action: "event3",
 				category: "test",
 				properties: {},
@@ -183,7 +201,7 @@ describe("ProxyProvider", () => {
 			// Check payload
 			const payload = JSON.parse(
 				fetchMock.mock.calls[0][1].body,
-			) as ProxyPayload;
+			) as ProxyPayloadV2;
 			expect(payload.events).toHaveLength(3);
 			expect(payload.events[0].type).toBe("track");
 		});
@@ -196,7 +214,7 @@ describe("ProxyProvider", () => {
 			await provider.initialize();
 
 			provider.identify("user-123");
-			await provider.track({
+			await trackWithInvocation(provider, {
 				action: "event1",
 				category: "test",
 				properties: {},
@@ -208,7 +226,7 @@ describe("ProxyProvider", () => {
 
 			const payload = JSON.parse(
 				fetchMock.mock.calls[0][1].body,
-			) as ProxyPayload;
+			) as ProxyPayloadV2;
 			expect(payload.events).toHaveLength(4);
 			expect(payload.events[0].type).toBe("identify");
 			expect(payload.events[1].type).toBe("track");
@@ -230,7 +248,7 @@ describe("ProxyProvider", () => {
 			});
 			await provider.initialize();
 
-			await provider.track({
+			await trackWithInvocation(provider, {
 				action: "test_event",
 				category: "test",
 				properties: {},
@@ -261,12 +279,12 @@ describe("ProxyProvider", () => {
 		});
 
 		it("should flush events manually", async () => {
-			await provider.track({
+			await trackWithInvocation(provider, {
 				action: "event1",
 				category: "test",
 				properties: {},
 			});
-			await provider.track({
+			await trackWithInvocation(provider, {
 				action: "event2",
 				category: "test",
 				properties: {},
@@ -277,7 +295,7 @@ describe("ProxyProvider", () => {
 			expect(fetchMock).toHaveBeenCalledTimes(1);
 			const payload = JSON.parse(
 				fetchMock.mock.calls[0][1].body,
-			) as ProxyPayload;
+			) as ProxyPayloadV2;
 			expect(payload.events).toHaveLength(2);
 		});
 
@@ -289,7 +307,7 @@ describe("ProxyProvider", () => {
 		it("should use beacon API when requested", async () => {
 			const beaconSpy = vi.spyOn(navigator, "sendBeacon");
 
-			await provider.track({
+			await trackWithInvocation(provider, {
 				action: "event1",
 				category: "test",
 				properties: {},
@@ -312,7 +330,7 @@ describe("ProxyProvider", () => {
 		});
 
 		it("should enrich context with page info", async () => {
-			await provider.track({
+			await trackWithInvocation(provider, {
 				action: "test_event",
 				category: "test",
 				properties: {},
@@ -322,7 +340,7 @@ describe("ProxyProvider", () => {
 
 			const payload = JSON.parse(
 				fetchMock.mock.calls[0][1].body,
-			) as ProxyPayload;
+			) as ProxyPayloadV2;
 			const trackEvent = payload.events[0];
 
 			if (trackEvent.type === "track") {
@@ -336,7 +354,7 @@ describe("ProxyProvider", () => {
 		});
 
 		it("should enrich context with device info", async () => {
-			await provider.track({
+			await trackWithInvocation(provider, {
 				action: "test_event",
 				category: "test",
 				properties: {},
@@ -346,7 +364,7 @@ describe("ProxyProvider", () => {
 
 			const payload = JSON.parse(
 				fetchMock.mock.calls[0][1].body,
-			) as ProxyPayload;
+			) as ProxyPayloadV2;
 			const trackEvent = payload.events[0];
 
 			if (trackEvent.type === "track") {
@@ -366,8 +384,9 @@ describe("ProxyProvider", () => {
 			}
 		});
 
-		it("should merge with provided context", async () => {
-			await provider.track(
+		it("should preserve allowlisted provided context fields", async () => {
+			await trackWithInvocation(
+				provider,
 				{
 					action: "test_event",
 					category: "test",
@@ -377,6 +396,19 @@ describe("ProxyProvider", () => {
 					user: {
 						userId: "user-123",
 					},
+					server: {
+						requestId: "forged-request",
+					},
+					page: {
+						path: "/provided",
+					},
+					utm: {
+						source: "newsletter",
+					},
+					device: {
+						type: "mobile",
+						ip: "203.0.113.5",
+					},
 				},
 			);
 
@@ -384,12 +416,18 @@ describe("ProxyProvider", () => {
 
 			const payload = JSON.parse(
 				fetchMock.mock.calls[0][1].body,
-			) as ProxyPayload;
+			) as ProxyPayloadV2;
 			const trackEvent = payload.events[0];
 
 			if (trackEvent.type === "track") {
-				expect(trackEvent.context?.user?.userId).toBe("user-123");
-				expect(trackEvent.context?.page?.path).toBe("/test-page");
+				expect(trackEvent.context).toMatchObject({
+					page: { path: "/provided" },
+					utm: { source: "newsletter" },
+					device: { type: "mobile" },
+				});
+				expect(trackEvent.context).not.toHaveProperty("user");
+				expect(trackEvent.context).not.toHaveProperty("server");
+				expect(trackEvent.context).not.toHaveProperty("device.ip");
 			}
 		});
 	});
@@ -419,7 +457,7 @@ describe("ProxyProvider", () => {
 			});
 			await provider.initialize();
 
-			await provider.track({
+			await trackWithInvocation(provider, {
 				action: "test_event",
 				category: "test",
 				properties: {},
@@ -462,7 +500,7 @@ describe("ProxyProvider", () => {
 			});
 			await provider.initialize();
 
-			await provider.track({
+			await trackWithInvocation(provider, {
 				action: "test_event",
 				category: "test",
 				properties: {},
@@ -495,7 +533,7 @@ describe("ProxyProvider", () => {
 			});
 			await provider.initialize();
 
-			await provider.track({
+			await trackWithInvocation(provider, {
 				action: "test_event",
 				category: "test",
 				properties: {},
@@ -527,7 +565,7 @@ describe("ProxyProvider", () => {
 			});
 			await provider.initialize();
 
-			await provider.track({
+			await trackWithInvocation(provider, {
 				action: "test_event",
 				category: "test",
 				properties: {},
@@ -563,12 +601,12 @@ describe("ProxyProvider", () => {
 			});
 			await provider.initialize();
 
-			await provider.track({
+			await trackWithInvocation(provider, {
 				action: "event1",
 				category: "test",
 				properties: {},
 			});
-			await provider.track({
+			await trackWithInvocation(provider, {
 				action: "event2",
 				category: "test",
 				properties: {},
@@ -584,7 +622,7 @@ describe("ProxyProvider", () => {
 			// Check beacon was called with correct data
 			const blobArg = beaconMock.mock.calls[0][1] as Blob;
 			const text = await blobArg.text();
-			const payload = JSON.parse(text) as ProxyPayload;
+			const payload = JSON.parse(text) as ProxyPayloadV2;
 			expect(payload.events).toHaveLength(2);
 		});
 	});
@@ -597,7 +635,7 @@ describe("ProxyProvider", () => {
 			});
 			await provider.initialize();
 
-			await provider.track({
+			await trackWithInvocation(provider, {
 				action: "test_event",
 				category: "test",
 				properties: {},
@@ -609,6 +647,113 @@ describe("ProxyProvider", () => {
 			await provider.flush();
 
 			expect(fetchMock).not.toHaveBeenCalled();
+		});
+	});
+
+	describe("V2 trust boundary", () => {
+		it("sends raw registry input through BrowserAnalytics while normal providers receive transformed properties", async () => {
+			const proxy = new ProxyProvider({
+				endpoint: "/api/events",
+				batch: { size: 100, interval: 10000 },
+			});
+			const normalProvider = new MockAnalyticsProvider();
+			const events = defineEvents({
+				purchaseCompleted: {
+					name: "purchase_completed",
+					category: "conversion",
+					properties: z.object({
+						amount: z.string().transform(Number),
+					}),
+				},
+			});
+			const analytics = new BrowserAnalytics({
+				events,
+				providers: [proxy, normalProvider],
+				validation: { onFailure: "throw" },
+			});
+
+			await analytics.track("purchase_completed", { amount: "49" });
+			await proxy.flush();
+
+			const payload = JSON.parse(fetchMock.mock.calls[0][1].body) as Record<
+				string,
+				unknown
+			>;
+			const [wireEvent] = payload.events as Array<Record<string, unknown>>;
+			expect(payload.version).toBe(2);
+			expect(wireEvent).toMatchObject({
+				type: "track",
+				name: "purchase_completed",
+				input: { amount: "49" },
+				inputProvided: true,
+			});
+			expect(normalProvider.calls.track[0].event.properties).toEqual({
+				amount: 49,
+			});
+		});
+
+		it("serializes only safe client context fields", async () => {
+			const proxy = new ProxyProvider({
+				endpoint: "/api/events",
+				batch: { size: 100, interval: 10000 },
+			});
+			const events = defineEvents({
+				testEvent: {
+					name: "test_event",
+					category: "engagement",
+					properties: z.object({ value: z.string() }),
+				},
+			});
+			const analytics = new BrowserAnalytics({
+				events,
+				providers: [proxy],
+				defaultContext: {
+					server: { requestId: "forged-request" },
+					device: { ip: "203.0.113.9" },
+				},
+			});
+			analytics.identify("forged-user", {
+				email: "forged@example.com",
+			});
+
+			await analytics.track("test_event", { value: "safe" });
+			await proxy.flush();
+
+			const serialized = fetchMock.mock.calls[0][1].body as string;
+			const payload = JSON.parse(serialized) as {
+				version?: number;
+				events: Array<Record<string, unknown>>;
+			};
+			const wireEvent = payload.events.find(
+				(event) => event.type === "track",
+			) as Record<string, unknown>;
+			const serializedTrack = JSON.stringify(wireEvent);
+			expect(payload.version).toBe(2);
+			expect(wireEvent).not.toHaveProperty("userId");
+			expect(wireEvent.context).not.toHaveProperty("user");
+			expect(wireEvent.context).not.toHaveProperty("server");
+			expect(wireEvent.context).not.toHaveProperty("device.ip");
+			expect(serializedTrack).not.toContain("forged-user");
+			expect(serializedTrack).not.toContain("forged@example.com");
+			expect(serializedTrack).not.toContain("forged-request");
+			expect(serializedTrack).not.toContain("203.0.113.9");
+		});
+
+		it("rejects direct track calls that lack raw invocation metadata", async () => {
+			const proxy = new ProxyProvider({
+				endpoint: "/api/events",
+				batch: { size: 100, interval: 10000 },
+			});
+
+			await expect(
+				proxy.track({
+					action: "purchase_completed",
+					category: "conversion",
+					properties: { amount: 49 },
+				}),
+			).rejects.toThrow(
+				"ProxyProvider.track must be called through BrowserAnalytics so raw event input is available",
+			);
 		});
 	});
 });

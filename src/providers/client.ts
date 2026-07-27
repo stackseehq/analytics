@@ -29,10 +29,11 @@ export type { ProxyProviderConfig } from "./proxy/client.js";
 export type {
 	ProxyBatchConfig,
 	ProxyRetryConfig,
-	ProxyEvent,
-	ProxyPayload,
-	ProxyTrackEvent,
-	ProxyIdentifyEvent,
-	ProxyPageViewEvent,
-	ProxyResetEvent,
+	ProxyClientContext,
+	ProxyEventV2,
+	ProxyPayloadV2,
+	ProxyTrackEventV2,
+	ProxyIdentifyEventV2,
+	ProxyPageViewEventV2,
+	ProxyResetEventV2,
 } from "./proxy/types.js";

@@ -1,41 +1,53 @@
-import type { BaseEvent, EventContext } from "@/core/events/types.js";
+import type { EventContext } from "@/core/events/types.js";
 
 /**
- * Proxy event types for batching and sending to server
+ * Browser-owned context fields that are safe to carry across the proxy
+ * transport boundary. Identity, server fields, and IP addresses are resolved
+ * on the server.
  */
-export type ProxyTrackEvent = {
-	type: "track";
-	event: BaseEvent;
-	context?: EventContext;
+export type ProxyClientContext = Pick<EventContext, "page" | "utm"> & {
+	device?: Omit<NonNullable<EventContext["device"]>, "ip">;
 };
 
-export type ProxyIdentifyEvent = {
+export interface ProxyTrackEventV2 {
+	type: "track";
+	name: string;
+	inputProvided: boolean;
+	input?: unknown;
+	occurredAt: number;
+	sessionId?: string;
+	context?: ProxyClientContext;
+}
+
+export interface ProxyIdentifyEventV2 {
 	type: "identify";
 	userId: string;
 	traits?: Record<string, unknown>;
-};
+}
 
-export type ProxyPageViewEvent = {
+export interface ProxyPageViewEventV2 {
 	type: "pageView";
 	properties?: Record<string, unknown>;
-	context?: EventContext;
-};
+	occurredAt: number;
+	context?: ProxyClientContext;
+}
 
-export type ProxyResetEvent = {
+export interface ProxyResetEventV2 {
 	type: "reset";
-};
+}
 
-export type ProxyEvent =
-	| ProxyTrackEvent
-	| ProxyIdentifyEvent
-	| ProxyPageViewEvent
-	| ProxyResetEvent;
+export type ProxyEventV2 =
+	| ProxyTrackEventV2
+	| ProxyIdentifyEventV2
+	| ProxyPageViewEventV2
+	| ProxyResetEventV2;
 
 /**
  * Payload sent to the proxy endpoint
  */
-export interface ProxyPayload {
-	events: ProxyEvent[];
+export interface ProxyPayloadV2 {
+	version: 2;
+	events: ProxyEventV2[];
 }
 
 /**

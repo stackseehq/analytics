@@ -5,7 +5,11 @@ description: Send browser events through your own endpoint, then forward them to
 
 The Proxy sends browser events through an endpoint you control, then forwards them to your server providers. Because the request goes to your own domain, it bypasses ad-blockers, and your server can enrich or filter events before they reach a vendor.
 
-The Proxy is not an analytics service. It is the transport between client analytics and server analytics: the browser batches events to your API, and your API replays them through whatever server providers you configure.
+The Proxy is not an analytics service. It is the transport between client analytics and server analytics: the browser batches version 2 events to your API, and your API validates and forwards them through whatever server providers you configure.
+
+:::warning[Your proxy endpoint is a security boundary]
+Treat every proxy payload as untrusted browser input. Trakoo ignores browser identity claims, server context, and IP addresses. Configure `resolveIdentity` to derive identity from authenticated server state; validating event properties does not authorize a browser to act for a user.
+:::
 
 ## When to use it
 
@@ -25,81 +29,109 @@ The Proxy ships with trakoo. There is no extra package to install. You do instal
 Add `ProxyProvider` to your client analytics and point it at the endpoint that will receive events. Events are buffered and flushed in batches.
 
 ```typescript title="lib/analytics.ts"
-import { createClientAnalytics } from 'trakoo/client';
-import { ProxyProvider } from 'trakoo/providers/client';
-import { appEvents } from '@/lib/events';
+import { createClientAnalytics } from "trakoo/client";
+import { ProxyProvider } from "trakoo/providers/client";
+import { appEvents } from "@/lib/events";
 
 export const analytics = createClientAnalytics({
   events: appEvents,
   providers: [
     new ProxyProvider({
-      endpoint: '/api/events',
-      batch: { size: 10, interval: 5000 }
-    })
-  ]
+      endpoint: "/api/events",
+      batch: { size: 10, interval: 5000 },
+    }),
+  ],
 });
 
-await analytics.track('button_clicked', { buttonId: 'signup-cta' });
+await analytics.track("button_clicked", { buttonId: "signup-cta" });
 ```
 
 ## Server-side usage
 
-Your endpoint receives the batched events and replays them through server analytics. Import the same `appEvents` registry on both sides so the ingesting server applies the same event lookup and validation as the client. Propertyless events stay propertyless during replay: the server accepts a payload whose `properties` is omitted or `{}` and uses the propertyless server call shape without an `undefined` placeholder. You have two options.
+Your endpoint receives the batch and sends each event through normal server analytics. Import the same `appEvents` registry on both sides. A version 2 track event carries the original registry input, so the server runs its Standard Schema validator on untrusted raw input before any provider receives transformed properties. The wire format also preserves whether input was omitted, which keeps propertyless events distinct from an explicitly supplied `undefined`.
 
-Replay does not re-run Standard Schema validators. A batched event carries the client's already-validated, post-transform output, and Standard Schema validators only accept input — re-validating output through a transforming schema could reject it incorrectly. The server still enforces event registration (unknown wire names are dropped or thrown per your validation policy) and a structural check that `properties` is a plain object; it does not repeat schema validation that already ran on the client before the batch was sent.
-
-:::warning[Deploy server registries ahead of clients]
-If a client bundle's registry knows an event the server registry doesn't — mid-deploy skew, or a stale cached client bundle — the server drops the replayed event as `unknown_event`, silently under the default drop policy. Deploy server registries ahead of (or together with) client registries, and set `validation.onError` or `debug` on `createServerAnalytics` to observe drops during rollout.
+:::warning[Upgrade V2 clients and servers together]
+Protocol V2 is a breaking wire change and the server rejects V1 payloads. Deploy compatible client and server versions together. Registry skew can also produce `unknown_event`; set `validation.onError` or `debug` on `createServerAnalytics` to observe drops during rollout.
 :::
 
-Let trakoo own the whole route with `createProxyHandler`:
+Let trakoo own the whole route with `createProxyHandler`. The resolver below reads an authenticated session from server state rather than trusting the event's claimed user ID or traits:
 
 ```typescript title="app/api/events/route.ts"
-import { createServerAnalytics } from 'trakoo/server';
+import { createServerAnalytics } from "trakoo/server";
 import {
   EmitKitServerProvider,
-  createProxyHandler
-} from 'trakoo/providers/server';
-import { appEvents } from '@/lib/events';
+  createProxyHandler,
+} from "trakoo/providers/server";
+import { appEvents } from "@/lib/events";
 
 const serverAnalytics = createServerAnalytics({
   events: appEvents,
   providers: [
     new EmitKitServerProvider({
       apiKey: process.env.EMITKIT_API_KEY!,
-      channelName: 'product-events'
-    })
-  ]
+      channelName: "product-events",
+    }),
+  ],
 });
 
-export const POST = createProxyHandler(serverAnalytics);
+async function resolveAuthenticatedIdentity(request: Request) {
+  const session = await getAuthenticatedSession(request);
+  if (!session) return undefined;
+
+  return {
+    userId: session.user.id,
+    user: {
+      email: session.user.email,
+      traits: { plan: session.user.plan },
+    },
+  };
+}
+
+export const POST = createProxyHandler(serverAnalytics, {
+  resolveIdentity: ({ request }) => resolveAuthenticatedIdentity(request),
+});
 ```
 
-Or keep your own handler and call `ingestProxyEvents` when you need to run auth, enrichment, or logging around ingestion:
+Or keep your own handler and call `ingestProxyEvents` when you need to run authentication, enrichment, or logging around ingestion:
 
 ```typescript title="app/api/events/route.ts"
-import { createServerAnalytics } from 'trakoo/server';
+import { createServerAnalytics } from "trakoo/server";
 import {
   PirschServerProvider,
-  ingestProxyEvents
-} from 'trakoo/providers/server';
-import { appEvents } from '@/lib/events';
+  ingestProxyEvents,
+} from "trakoo/providers/server";
+import { appEvents } from "@/lib/events";
 
 const serverAnalytics = createServerAnalytics({
   events: appEvents,
   providers: [
     new PirschServerProvider({
-      hostname: 'example.com',
-      clientSecret: process.env.PIRSCH_SECRET!
-    })
-  ]
+      hostname: "example.com",
+      clientSecret: process.env.PIRSCH_SECRET!,
+    }),
+  ],
 });
 
 export async function POST(req: Request) {
-  await ingestProxyEvents(req, serverAnalytics);
-  return new Response('OK');
+  await ingestProxyEvents(req, serverAnalytics, {
+    resolveIdentity: async ({ request }) => {
+      const session = await getAuthenticatedSession(request);
+      return session
+        ? {
+            userId: session.user.id,
+            user: {
+              email: session.user.email,
+              traits: { plan: session.user.plan },
+            },
+          }
+        : undefined;
+    },
+  });
+  return new Response("OK");
 }
 ```
+
+Browser `identify()` calls are still included as claims so a resolver can inspect the requested action, but their user ID, email, and traits never go directly to a provider. Track and page-view events stay anonymous when `resolveIdentity` is absent or returns `undefined`; identify events fail closed without a trusted user ID.
 
 ## How events flow
 
@@ -107,7 +139,7 @@ export async function POST(req: Request) {
 Browser → ProxyProvider (batches) → your /api/events → server providers
 ```
 
-The browser collects events and flushes a batch once `batch.size` is reached or `batch.interval` elapses, whichever comes first. Your endpoint hands the batch to server analytics, which fans it out to each configured server provider — the same routing rules from [Providers](/docs/providers#routing) apply on the server side.
+The browser collects raw event input and flushes a V2 batch once `batch.size` is reached or `batch.interval` elapses, whichever comes first. Your endpoint validates the raw input through the server registry, adds server-owned request context, resolves trusted identity, and then fans the transformed event out to configured providers. The same routing rules from [Providers](/docs/providers#routing) apply on the server side.
 
 ## Configuration
 
@@ -118,12 +150,13 @@ The browser collects events and flushes a batch once `batch.size` is reached or 
     endpoint: {
       type: "string",
       required: true,
-      description: "URL that receives batched events, usually a route on your own domain."
+      description:
+        "URL that receives batched events, usually a route on your own domain.",
     },
     batch: {
       type: "object",
-      description: "Controls how events are buffered before they are sent."
-    }
+      description: "Controls how events are buffered before they are sent.",
+    },
   }}
 />
 
@@ -133,12 +166,12 @@ The `batch` object accepts:
   type={{
     size: {
       type: "number",
-      description: "Number of events to buffer before flushing a batch."
+      description: "Number of events to buffer before flushing a batch.",
     },
     interval: {
       type: "number",
-      description: "Milliseconds to wait before flushing a partial batch."
-    }
+      description: "Milliseconds to wait before flushing a partial batch.",
+    },
   }}
 />
 
