@@ -3,7 +3,36 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { assertRootBundleNeutral } from "../scripts/package-verification.mjs";
-import { assertDeclarationTargetsExist } from "../scripts/verify-package.mjs";
+import {
+	assertDeclarationTargetsExist,
+	assertMitPackageLicense,
+} from "../scripts/verify-package.mjs";
+
+describe("packed license verification", () => {
+	it("accepts MIT package metadata and license text", () => {
+		expect(() =>
+			assertMitPackageLicense(
+				{ license: "MIT" },
+				"MIT License\n\nPermission is hereby granted...",
+			),
+		).not.toThrow();
+	});
+
+	it("rejects non-MIT package metadata", () => {
+		expect(() =>
+			assertMitPackageLicense({ license: "ISC" }, "MIT License"),
+		).toThrow("packed trakoo declares ISC license");
+	});
+
+	it("rejects missing or non-MIT packed license text", () => {
+		expect(() => assertMitPackageLicense({ license: "MIT" })).toThrow(
+			"packed trakoo LICENSE is not the MIT license",
+		);
+		expect(() =>
+			assertMitPackageLicense({ license: "MIT" }, "ISC License"),
+		).toThrow("packed trakoo LICENSE is not the MIT license");
+	});
+});
 
 describe("packed root bundle verification", () => {
 	it("reports a missing declaration target", () => {

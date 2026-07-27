@@ -27,6 +27,20 @@ export function assertDeclarationTargetsExist(distDirectory, relativeTargets) {
 	}
 }
 
+export function assertMitPackageLicense(manifest, licenseText) {
+	if (manifest.license !== "MIT") {
+		throw new Error(
+			`packed trakoo declares ${manifest.license ?? "no"} license`,
+		);
+	}
+	if (
+		typeof licenseText !== "string" ||
+		!licenseText.startsWith("MIT License")
+	) {
+		throw new Error("packed trakoo LICENSE is not the MIT license");
+	}
+}
+
 const consumerSource = String.raw`
 import { defineEvents, noProperties, typed } from "trakoo";
 import {
@@ -121,6 +135,13 @@ if (invokedAsScript) {
 		const installedManifest = JSON.parse(
 			readFileSync(
 				join(consumerDirectory, "node_modules/trakoo/package.json"),
+				"utf8",
+			),
+		);
+		assertMitPackageLicense(
+			installedManifest,
+			readFileSync(
+				join(consumerDirectory, "node_modules/trakoo/LICENSE"),
 				"utf8",
 			),
 		);
