@@ -72,8 +72,6 @@ export class EmitKitServerProvider extends BaseAnalyticsProvider {
 	private client?: EmitKit;
 	private initialized = false;
 	private config: EmitKitServerConfig;
-	private currentUserId?: string;
-	private currentUserEmail?: string;
 
 	constructor(config: EmitKitServerConfig) {
 		super({ debug: config.debug, enabled: config.enabled });
@@ -114,17 +112,14 @@ export class EmitKitServerProvider extends BaseAnalyticsProvider {
 		}
 	}
 
-	async identify(userId: string, traits?: Record<string, unknown>): Promise<void> {
+	async identify(
+		userId: string,
+		traits?: Record<string, unknown>,
+	): Promise<void> {
 		if (!this.isEnabled() || !this.initialized || !this.client) return;
-
-		// Store for later use in track calls
-		this.currentUserId = userId;
 
 		// Extract email from traits
 		const email = (traits?.email as string | undefined) || userId;
-		if (email?.includes("@")) {
-			this.currentUserEmail = email;
-		}
 
 		// Build aliases array - EmitKit supports multiple identifiers
 		const aliases: string[] = [];
@@ -159,7 +154,10 @@ export class EmitKitServerProvider extends BaseAnalyticsProvider {
 				aliasesFailed: result.data.aliases?.failed?.length || 0,
 			});
 
-			if (result.data.aliases?.failed && result.data.aliases.failed.length > 0) {
+			if (
+				result.data.aliases?.failed &&
+				result.data.aliases.failed.length > 0
+			) {
 				console.warn(
 					"[EmitKit-Server] Some aliases failed to create:",
 					result.data.aliases.failed,
@@ -173,13 +171,9 @@ export class EmitKitServerProvider extends BaseAnalyticsProvider {
 	async track(event: BaseEvent, context?: EventContext): Promise<void> {
 		if (!this.isEnabled() || !this.initialized || !this.client) return;
 
-		// Determine userId - try context.user first, then event, then stored
+		// Server providers use only identity supplied on the current call.
 		const userId =
-			context?.user?.email ||
-			context?.user?.userId ||
-			event.userId ||
-			this.currentUserEmail ||
-			this.currentUserId;
+			context?.user?.email || context?.user?.userId || event.userId;
 
 		// Generate event title from action (convert snake_case to Title Case)
 		const title = this.formatEventTitle(event.action);
@@ -253,15 +247,14 @@ export class EmitKitServerProvider extends BaseAnalyticsProvider {
 		}
 	}
 
-	async pageView(properties?: Record<string, unknown>, context?: EventContext): Promise<void> {
+	async pageView(
+		properties?: Record<string, unknown>,
+		context?: EventContext,
+	): Promise<void> {
 		if (!this.isEnabled() || !this.initialized || !this.client) return;
 
-		// Determine userId
-		const userId =
-			context?.user?.email ||
-			context?.user?.userId ||
-			this.currentUserEmail ||
-			this.currentUserId;
+		// Page views may only use identity supplied in the current context.
+		const userId = context?.user?.email || context?.user?.userId;
 
 		// Strip __emitkit_channel from properties if present
 		const { __emitkit_channel, ...cleanProperties } = properties || {};
@@ -325,11 +318,7 @@ export class EmitKitServerProvider extends BaseAnalyticsProvider {
 	async reset(): Promise<void> {
 		if (!this.isEnabled() || !this.initialized || !this.client) return;
 
-		// Clear stored user context
-		this.currentUserId = undefined;
-		this.currentUserEmail = undefined;
-
-		this.log("Reset user session");
+		this.log("Reset called; server provider has no retained identity");
 	}
 
 	async shutdown(): Promise<void> {

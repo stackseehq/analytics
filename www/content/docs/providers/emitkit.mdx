@@ -26,35 +26,41 @@ EmitKit is server-only — its SDK has no browser package. To capture browser ev
 ## Server-side usage
 
 ```typescript title="lib/server-analytics.ts"
-import { createServerAnalytics } from 'trakoo/server';
-import { EmitKitServerProvider } from 'trakoo/providers/server';
-import { appEvents } from '@/lib/events';
+import { createServerAnalytics } from "trakoo/server";
+import { EmitKitServerProvider } from "trakoo/providers/server";
+import { appEvents } from "@/lib/events";
 
 export const serverAnalytics = createServerAnalytics({
   events: appEvents,
   providers: [
     new EmitKitServerProvider({
       apiKey: process.env.EMITKIT_API_KEY!, // starts with 'emitkit_'
-      channelName: 'general'
-    })
-  ]
+      channelName: "general",
+    }),
+  ],
 });
 ```
 
-Track events with properties and optional user context. EmitKit accepts multiple identifiers per user, so later events can reference a user by id, email, or username.
+Server provider instances are stateless. Calling `identify()` updates the remote EmitKit profile, but does not set local identity for later events. Pass the current request's user id or email with every attributed server event and page view.
+
+Track events with properties and optional user context. EmitKit accepts multiple identifiers per user, including an id, email, or username.
 
 ```typescript
-await serverAnalytics.track('purchase_completed', {
-  orderId: 'order-123',
-  amount: 99.99,
-  currency: 'USD'
-}, {
-  userId: 'user-456',
-  user: {
-    email: 'user@example.com',
-    traits: { plan: 'pro' }
-  }
-});
+await serverAnalytics.track(
+  "purchase_completed",
+  {
+    orderId: "order-123",
+    amount: 99.99,
+    currency: "USD",
+  },
+  {
+    userId: "user-456",
+    user: {
+      email: "user@example.com",
+      traits: { plan: "pro" },
+    },
+  },
+);
 ```
 
 ## Channel routing
@@ -70,24 +76,24 @@ Map categories to channels so events route automatically:
 ```typescript
 new EmitKitServerProvider({
   apiKey: process.env.EMITKIT_API_KEY!,
-  channelName: 'general', // fallback for unmapped categories
+  channelName: "general", // fallback for unmapped categories
   categoryChannelMap: {
-    user: 'user-activity',
-    error: 'alerts',
-    conversion: 'revenue'
-  }
+    user: "user-activity",
+    error: "alerts",
+    conversion: "revenue",
+  },
 });
 
 // Category 'user' → 'user-activity'
-await serverAnalytics.track('user_signed_up', { plan: 'pro' });
+await serverAnalytics.track("user_signed_up", { plan: "pro" });
 ```
 
 Override the channel for a single event by adding `__emitkit_channel`. trakoo strips this key before sending, so it never appears in the event metadata.
 
 ```typescript
-await serverAnalytics.track('large_payment', {
+await serverAnalytics.track("large_payment", {
   amount: 50000,
-  __emitkit_channel: 'critical-payments'
+  __emitkit_channel: "critical-payments",
 });
 ```
 
@@ -100,39 +106,39 @@ EmitKit turns event names into readable titles (`user_signed_up` becomes "User S
 Send browser events through your own API, then forward them to EmitKit on the server.
 
 ```typescript title="lib/analytics.ts"
-import { createClientAnalytics } from 'trakoo/client';
-import { ProxyProvider } from 'trakoo/providers/client';
-import { appEvents } from '@/lib/events';
+import { createClientAnalytics } from "trakoo/client";
+import { ProxyProvider } from "trakoo/providers/client";
+import { appEvents } from "@/lib/events";
 
 export const analytics = createClientAnalytics({
   events: appEvents,
-  providers: [new ProxyProvider({ endpoint: '/api/analytics' })]
+  providers: [new ProxyProvider({ endpoint: "/api/analytics" })],
 });
 
-await analytics.track('button_clicked', { buttonId: 'signup' });
+await analytics.track("button_clicked", { buttonId: "signup" });
 ```
 
 ```typescript title="app/api/analytics/route.ts"
-import { createServerAnalytics } from 'trakoo/server';
+import { createServerAnalytics } from "trakoo/server";
 import {
   EmitKitServerProvider,
-  ingestProxyEvents
-} from 'trakoo/providers/server';
-import { appEvents } from '@/lib/events';
+  ingestProxyEvents,
+} from "trakoo/providers/server";
+import { appEvents } from "@/lib/events";
 
 const serverAnalytics = createServerAnalytics({
   events: appEvents,
   providers: [
     new EmitKitServerProvider({
       apiKey: process.env.EMITKIT_API_KEY!,
-      channelName: 'user-activity'
-    })
-  ]
+      channelName: "user-activity",
+    }),
+  ],
 });
 
 export async function POST(request: Request) {
   await ingestProxyEvents(request, serverAnalytics);
-  return new Response('OK');
+  return new Response("OK");
 }
 ```
 
@@ -143,37 +149,38 @@ export async function POST(request: Request) {
     apiKey: {
       type: "string",
       required: true,
-      description: "Your EmitKit API key. Starts with 'emitkit_'."
+      description: "Your EmitKit API key. Starts with 'emitkit_'.",
     },
     channelName: {
       type: "string",
       default: "general",
-      description: "Default channel when no override or category mapping applies."
+      description:
+        "Default channel when no override or category mapping applies.",
     },
     categoryChannelMap: {
       type: "Record<string, string>",
-      description: "Map event categories to specific channels."
+      description: "Map event categories to specific channels.",
     },
     notify: {
       type: "boolean",
       default: "true",
-      description: "Send a notification for each event."
+      description: "Send a notification for each event.",
     },
     displayAs: {
       type: "'message' | 'notification'",
       default: "notification",
-      description: "How events appear in EmitKit."
+      description: "How events appear in EmitKit.",
     },
     debug: {
       type: "boolean",
       default: "false",
-      description: "Log debug output for the provider."
+      description: "Log debug output for the provider.",
     },
     enabled: {
       type: "boolean",
       default: "true",
-      description: "Enable or disable the provider."
-    }
+      description: "Enable or disable the provider.",
+    },
   }}
 />
 
@@ -181,6 +188,7 @@ export async function POST(request: Request) {
 
 - Route by category with `categoryChannelMap` and reserve `__emitkit_channel` for the few events that need a dedicated channel.
 - Name channels by domain — `payments`, `user-signups`, `team-alerts` — so feeds stay scannable.
+- `identify()` updates a remote profile only; provide the current request's user id or email on every attributed server event and page view.
 - Include email and username in user traits so events resolve to the same person across identifiers.
 - Run EmitKit alongside an analytics provider: EmitKit for feeds and notifications, PostHog or Pirsch for dashboards. See [routing](/docs/providers#routing) to control which events reach each provider.
 

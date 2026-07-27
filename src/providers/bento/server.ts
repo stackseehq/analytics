@@ -53,7 +53,6 @@ export class BentoServerProvider extends BaseAnalyticsProvider {
 	private client?: Analytics;
 	private initialized = false;
 	private config: BentoServerConfig;
-	private currentUserEmail?: string;
 
 	constructor(config: BentoServerConfig) {
 		super({ debug: config.debug, enabled: config.enabled });
@@ -102,7 +101,10 @@ export class BentoServerProvider extends BaseAnalyticsProvider {
 		}
 	}
 
-	async identify(userId: string, traits?: Record<string, unknown>): Promise<void> {
+	async identify(
+		userId: string,
+		traits?: Record<string, unknown>,
+	): Promise<void> {
 		if (!this.isEnabled() || !this.initialized || !this.client) return;
 
 		// Extract email from userId or traits
@@ -116,8 +118,6 @@ export class BentoServerProvider extends BaseAnalyticsProvider {
 			});
 			return;
 		}
-
-		this.currentUserEmail = email;
 
 		// Add subscriber with traits using the V1 API
 		const fields = traits ? { ...traits } : {};
@@ -134,10 +134,9 @@ export class BentoServerProvider extends BaseAnalyticsProvider {
 	async track(event: BaseEvent, context?: EventContext): Promise<void> {
 		if (!this.isEnabled() || !this.initialized || !this.client) return;
 
-		// Get email from context.user, current user, or userId
+		// Server providers use only identity supplied on the current call.
 		const email =
 			context?.user?.email ||
-			this.currentUserEmail ||
 			(context?.user?.userId as string | undefined) ||
 			event.userId;
 
@@ -193,11 +192,15 @@ export class BentoServerProvider extends BaseAnalyticsProvider {
 		}
 	}
 
-	async pageView(properties?: Record<string, unknown>, context?: EventContext): Promise<void> {
+	async pageView(
+		properties?: Record<string, unknown>,
+		context?: EventContext,
+	): Promise<void> {
 		if (!this.isEnabled() || !this.initialized || !this.client) return;
 
-		// Get email from context or current user
-		const email = context?.user?.email || this.currentUserEmail;
+		// Page views may only use identity supplied in the current context.
+		const email =
+			context?.user?.email || (context?.user?.userId as string | undefined);
 
 		// Bento SDK does not currently support anonymous events
 		// See: https://github.com/bentonow/bento-node-sdk
@@ -243,9 +246,7 @@ export class BentoServerProvider extends BaseAnalyticsProvider {
 	async reset(): Promise<void> {
 		if (!this.isEnabled() || !this.initialized || !this.client) return;
 
-		// Clear the current user email
-		this.currentUserEmail = undefined;
-		this.log("Reset user session");
+		this.log("Reset called; server provider has no retained identity");
 	}
 
 	async shutdown(): Promise<void> {

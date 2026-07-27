@@ -22,7 +22,7 @@ It is not a general-purpose analytics tool. Avoid Bento for:
 Pair Bento with a web-analytics provider such as [PostHog](/docs/providers/posthog) or [Pirsch](/docs/providers/pirsch), and route only identified events to Bento.
 
 :::warning[Bento does not track anonymous page views]
-The Bento SDK requires an email address for every event, including page views. Events from visitors you haven't identified yet are skipped with a warning. Exclude `pageView` from Bento and let another provider handle anonymous traffic, so Bento only receives events that follow an `identify()` call carrying an email.
+The Bento SDK requires an email address for every event, including page views. Events without an email in their current call context are skipped with a warning. Exclude `pageView` from Bento and let another provider handle anonymous traffic.
 :::
 
 ## Installation
@@ -39,12 +39,12 @@ pnpm install @bentonow/bento-node-sdk
 Route Bento to `identify` and `track`, and let PostHog cover page views and anonymous traffic. `exclude: ['pageView']` does the same job if you prefer to name the method you are dropping.
 
 ```typescript title="lib/analytics.ts"
-import { createClientAnalytics } from 'trakoo/client';
+import { createClientAnalytics } from "trakoo/client";
 import {
   BentoClientProvider,
-  PostHogClientProvider
-} from 'trakoo/providers/client';
-import { appEvents } from '@/lib/events';
+  PostHogClientProvider,
+} from "trakoo/providers/client";
+import { appEvents } from "@/lib/events";
 
 const analytics = createClientAnalytics({
   events: appEvents,
@@ -52,11 +52,11 @@ const analytics = createClientAnalytics({
     new PostHogClientProvider({ token: import.meta.env.VITE_POSTHOG_KEY }),
     {
       provider: new BentoClientProvider({
-        siteUuid: import.meta.env.VITE_BENTO_SITE_UUID
+        siteUuid: import.meta.env.VITE_BENTO_SITE_UUID,
       }),
-      methods: ['identify', 'track']
-    }
-  ]
+      methods: ["identify", "track"],
+    },
+  ],
 });
 
 await analytics.initialize();
@@ -67,32 +67,44 @@ await analytics.initialize();
 The same routing applies on the server. Here Pirsch handles page views while Bento receives identified events only.
 
 ```typescript title="lib/server-analytics.ts"
-import { createServerAnalytics } from 'trakoo/server';
+import { createServerAnalytics } from "trakoo/server";
 import {
   BentoServerProvider,
-  PirschServerProvider
-} from 'trakoo/providers/server';
-import { appEvents } from '@/lib/events';
+  PirschServerProvider,
+} from "trakoo/providers/server";
+import { appEvents } from "@/lib/events";
 
 const serverAnalytics = createServerAnalytics({
   events: appEvents,
   providers: [
     new PirschServerProvider({
-      hostname: 'example.com',
-      clientSecret: process.env.PIRSCH_ACCESS_KEY!
+      hostname: "example.com",
+      clientSecret: process.env.PIRSCH_ACCESS_KEY!,
     }),
     {
       provider: new BentoServerProvider({
         siteUuid: process.env.BENTO_SITE_UUID!,
         authentication: {
           publishableKey: process.env.BENTO_PUBLISHABLE_KEY!,
-          secretKey: process.env.BENTO_SECRET_KEY!
-        }
+          secretKey: process.env.BENTO_SECRET_KEY!,
+        },
       }),
-      exclude: ['pageView']
-    }
-  ]
+      exclude: ["pageView"],
+    },
+  ],
 });
+```
+
+Server provider instances are stateless. Calling `identify()` updates the Bento subscriber, but does not set local identity for later events. Pass an email with every attributed server event:
+
+```typescript
+await serverAnalytics.track(
+  "subscription_renewed",
+  { plan: "pro" },
+  {
+    user: { email: "user@example.com" },
+  },
+);
 ```
 
 ## Configuration
@@ -102,10 +114,10 @@ const serverAnalytics = createServerAnalytics({
 <TypeTable
   type={{
     siteUuid: {
-      type: 'string',
+      type: "string",
       required: true,
-      description: 'Your Bento site UUID, used to load the tracking script.'
-    }
+      description: "Your Bento site UUID, used to load the tracking script.",
+    },
   }}
 />
 
@@ -114,27 +126,27 @@ const serverAnalytics = createServerAnalytics({
 <TypeTable
   type={{
     siteUuid: {
-      type: 'string',
+      type: "string",
       required: true,
-      description: 'Your Bento site UUID.'
+      description: "Your Bento site UUID.",
     },
-    'authentication.publishableKey': {
-      type: 'string',
+    "authentication.publishableKey": {
+      type: "string",
       required: true,
-      description: 'Bento publishable key.'
+      description: "Bento publishable key.",
     },
-    'authentication.secretKey': {
-      type: 'string',
+    "authentication.secretKey": {
+      type: "string",
       required: true,
-      description: 'Bento secret key. Keep it server-side only.'
-    }
+      description: "Bento secret key. Keep it server-side only.",
+    },
   }}
 />
 
 ## Delivery behavior
 
 - Bento batches events, so they can take one to three minutes to appear.
-- User context comes from your `identify()` call, so always identify with a valid email before tracking events.
+- `identify()` updates a subscriber only. Every attributed server event must include a valid email in its current call context.
 
 ## Resources
 
