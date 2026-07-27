@@ -43,7 +43,9 @@ export function createServerAnalytics<
 		enabled: config.enabled,
 		defaultContext: config.defaultContext,
 	});
-	analytics.initialize();
+	void analytics.initialize().catch((error: unknown) => {
+		console.error("[Analytics] Failed to initialize:", error);
+	});
 
 	return analytics;
 }

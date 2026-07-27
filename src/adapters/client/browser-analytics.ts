@@ -311,7 +311,10 @@ export class BrowserAnalytics<
 		// If already initializing, return the existing promise
 		if (this.initializePromise) return this.initializePromise;
 
-		this.initializePromise = this._doInitialize();
+		this.initializePromise = this._doInitialize().catch((error) => {
+			this.initializePromise = undefined;
+			throw error;
+		});
 		return this.initializePromise;
 	}
 
@@ -345,6 +348,22 @@ export class BrowserAnalytics<
 		} else if (this.initializePromise) {
 			await this.initializePromise;
 		}
+	}
+
+	private runAfterInitialization(action: () => void, operation: string): void {
+		if (this.initialized) {
+			action();
+			return;
+		}
+
+		void this.ensureInitialized()
+			.then(action)
+			.catch((error) => {
+				console.error(
+					`[Analytics] Failed to initialize during ${operation}:`,
+					error,
+				);
+			});
 	}
 
 	/**
@@ -420,19 +439,18 @@ export class BrowserAnalytics<
 		this.userId = userId;
 		this.userTraits = traits;
 
-		// Run initialization if needed, but don't block
-		this.ensureInitialized().catch((error) => {
-			console.error("[Analytics] Failed to initialize during identify:", error);
-		});
-
-		for (const config of this.providerConfigs) {
-			if (this.shouldCallMethod(config, "identify")) {
-				config.provider.identify(
-					userId,
-					traits as Record<string, unknown> | undefined,
-				);
+		const userIdSnapshot = userId;
+		const traitsSnapshot = traits;
+		this.runAfterInitialization(() => {
+			for (const config of this.providerConfigs) {
+				if (this.shouldCallMethod(config, "identify")) {
+					config.provider.identify(
+						userIdSnapshot,
+						traitsSnapshot as Record<string, unknown> | undefined,
+					);
+				}
 			}
-		}
+		}, "identify");
 	}
 
 	/**
@@ -645,25 +663,28 @@ export class BrowserAnalytics<
 	pageView(properties?: Record<string, unknown>): void {
 		if (!this.enabled) return;
 
-		// Run initialization if needed, but don't block
-		this.ensureInitialized().catch((error) => {
-			console.error("[Analytics] Failed to initialize during pageView:", error);
-		});
+		const page = {
+			path: window.location.pathname,
+			title: document.title,
+			referrer: document.referrer,
+		};
+		this.updateContext({ page });
 
-		// Update page context
-		this.updateContext({
-			page: {
-				path: window.location.pathname,
-				title: document.title,
-				referrer: document.referrer,
-			},
-		});
-
-		for (const config of this.providerConfigs) {
-			if (this.shouldCallMethod(config, "pageView")) {
-				config.provider.pageView(properties, this.context as EventContext);
+		const propertiesSnapshot = properties;
+		const contextSnapshot: EventContext<TUserTraits> = {
+			...this.context,
+			page,
+		};
+		this.runAfterInitialization(() => {
+			for (const config of this.providerConfigs) {
+				if (this.shouldCallMethod(config, "pageView")) {
+					config.provider.pageView(
+						propertiesSnapshot,
+						contextSnapshot as EventContext,
+					);
+				}
 			}
-		}
+		}, "pageView");
 	}
 
 	/**
@@ -724,22 +745,21 @@ export class BrowserAnalytics<
 	pageLeave(properties?: Record<string, unknown>): void {
 		if (!this.enabled) return;
 
-		// Run initialization if needed, but don't block
-		this.ensureInitialized().catch((error) => {
-			console.error(
-				"[Analytics] Failed to initialize during pageLeave:",
-				error,
-			);
-		});
-
-		for (const config of this.providerConfigs) {
-			if (
-				this.shouldCallMethod(config, "pageLeave") &&
-				config.provider.pageLeave
-			) {
-				config.provider.pageLeave(properties, this.context as EventContext);
+		const propertiesSnapshot = properties;
+		const contextSnapshot = { ...this.context };
+		this.runAfterInitialization(() => {
+			for (const config of this.providerConfigs) {
+				if (
+					this.shouldCallMethod(config, "pageLeave") &&
+					config.provider.pageLeave
+				) {
+					config.provider.pageLeave(
+						propertiesSnapshot,
+						contextSnapshot as EventContext,
+					);
+				}
 			}
-		}
+		}, "pageLeave");
 	}
 
 	/**
@@ -800,11 +820,13 @@ export class BrowserAnalytics<
 		this.userId = undefined;
 		this.userTraits = undefined;
 		this.sessionId = this.generateSessionId();
-		for (const config of this.providerConfigs) {
-			if (this.shouldCallMethod(config, "reset")) {
-				config.provider.reset();
+		this.runAfterInitialization(() => {
+			for (const config of this.providerConfigs) {
+				if (this.shouldCallMethod(config, "reset")) {
+					config.provider.reset();
+				}
 			}
-		}
+		}, "reset");
 	}
 
 	/**

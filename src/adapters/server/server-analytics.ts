@@ -89,6 +89,7 @@ export class ServerAnalytics<
 > {
 	private providerConfigs: NormalizedProviderConfig[] = [];
 	private initialized = false;
+	private initializePromise?: Promise<void>;
 	private readonly registry: TRegistry;
 	private readonly validation?: ValidationConfig;
 	private readonly debug: boolean;
@@ -361,16 +362,41 @@ export class ServerAnalytics<
 	 * }
 	 * ```
 	 */
-	initialize(): void {
-		if (!this.enabled) return;
-		if (this.initialized) return;
+	initialize(): Promise<void> {
+		if (!this.enabled || this.initialized) return Promise.resolve();
+		if (this.initializePromise) return this.initializePromise;
 
-		// Initialize all providers synchronously (initialize is always called regardless of routing)
-		for (const config of this.providerConfigs) {
-			config.provider.initialize();
+		this.initializePromise = Promise.all(
+			this.providerConfigs.map(({ provider }) => provider.initialize()),
+		)
+			.then(() => {
+				this.initialized = true;
+			})
+			.catch((error) => {
+				this.initializePromise = undefined;
+				throw error;
+			});
+		return this.initializePromise;
+	}
+
+	private async ensureInitialized(): Promise<void> {
+		if (!this.initialized) await this.initialize();
+	}
+
+	private runAfterInitialization(action: () => void, operation: string): void {
+		if (this.initialized) {
+			action();
+			return;
 		}
 
-		this.initialized = true;
+		void this.ensureInitialized()
+			.then(action)
+			.catch((error) => {
+				console.error(
+					`[Analytics] Failed to initialize during ${operation}:`,
+					error,
+				);
+			});
 	}
 
 	/**
@@ -421,6 +447,7 @@ export class ServerAnalytics<
 	 */
 	async identify(userId: string, traits?: TUserTraits): Promise<void> {
 		if (!this.enabled) return;
+		if (!this.initialized) await this.ensureInitialized();
 
 		const promises = this.providerConfigs
 			.filter((config) => this.shouldCallMethod(config, "identify"))
@@ -565,11 +592,7 @@ export class ServerAnalytics<
 		...args: ServerTrackArgs<TRegistry, TName, ServerTrackOptions<TUserTraits>>
 	): Promise<void> {
 		if (!this.enabled) return;
-
-		if (!this.initialized) {
-			console.warn("[Analytics] Not initialized. Call initialize() first.");
-			return;
-		}
+		if (!this.initialized) await this.ensureInitialized();
 
 		const argumentValues: readonly unknown[] = args;
 		const eventName = args[0];
@@ -649,11 +672,7 @@ export class ServerAnalytics<
 		options: ServerTrackOptions<TUserTraits> | undefined,
 	): Promise<void> {
 		if (!this.enabled) return;
-
-		if (!this.initialized) {
-			console.warn("[Analytics] Not initialized. Call initialize() first.");
-			return;
-		}
+		if (!this.initialized) await this.ensureInitialized();
 
 		const resolved = await resolveReplayEvent(
 			this.registry,
@@ -784,7 +803,7 @@ export class ServerAnalytics<
 		},
 	): Promise<void> {
 		if (!this.enabled) return;
-		if (!this.initialized) return;
+		if (!this.initialized) await this.ensureInitialized();
 
 		const context: EventContext<TUserTraits> = {
 			...this.defaultContext,
@@ -872,21 +891,26 @@ export class ServerAnalytics<
 		},
 	): void {
 		if (!this.enabled) return;
-		if (!this.initialized) return;
 
+		const propertiesSnapshot = properties;
 		const context: EventContext<TUserTraits> = {
 			...this.defaultContext,
 			...options?.context,
 		};
 
-		for (const config of this.providerConfigs) {
-			if (
-				this.shouldCallMethod(config, "pageLeave") &&
-				config.provider.pageLeave
-			) {
-				config.provider.pageLeave(properties, context as EventContext);
+		this.runAfterInitialization(() => {
+			for (const config of this.providerConfigs) {
+				if (
+					this.shouldCallMethod(config, "pageLeave") &&
+					config.provider.pageLeave
+				) {
+					config.provider.pageLeave(
+						propertiesSnapshot,
+						context as EventContext,
+					);
+				}
 			}
-		}
+		}, "pageLeave");
 	}
 
 	/**
@@ -991,6 +1015,7 @@ export class ServerAnalytics<
 	 */
 	async shutdown(): Promise<void> {
 		if (!this.enabled) return;
+		await this.initializePromise?.catch(() => undefined);
 
 		// Shutdown all providers that support it (note: shutdown is not routable, always called)
 		const shutdownPromises = this.providerConfigs.map((config) => {

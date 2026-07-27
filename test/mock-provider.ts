@@ -93,3 +93,30 @@ export class MockAnalyticsProvider extends BaseAnalyticsProvider {
 		return this.initialized;
 	}
 }
+
+export class DeferredInitializeProvider extends MockAnalyticsProvider {
+	private initializationPromise?: Promise<void>;
+	private resolveInitialization?: () => void;
+	private rejectInitialization?: (error: Error) => void;
+
+	override initialize(): Promise<void> {
+		this.calls.initialize++;
+		this.initializationPromise = new Promise<void>((resolve, reject) => {
+			this.resolveInitialization = resolve;
+			this.rejectInitialization = reject;
+		}).then(() => {
+			super.initialize();
+			this.calls.initialize--;
+		});
+		return this.initializationPromise;
+	}
+
+	resolveInitialize(): void {
+		this.resolveInitialization?.();
+	}
+
+	rejectInitialize(error: Error): void {
+		void this.initializationPromise?.catch(() => undefined);
+		this.rejectInitialization?.(error);
+	}
+}

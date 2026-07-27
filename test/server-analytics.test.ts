@@ -8,7 +8,10 @@ import {
 	typed,
 } from "@/core/events";
 import { createServerAnalytics } from "@/server";
-import { MockAnalyticsProvider } from "./mock-provider";
+import {
+	DeferredInitializeProvider,
+	MockAnalyticsProvider,
+} from "./mock-provider";
 
 interface UserTraits {
 	email?: string;
@@ -62,6 +65,8 @@ function assertServerTypes(): void {
 	expectTypeOf(analytics.identify)
 		.parameter(1)
 		.toEqualTypeOf<UserTraits | undefined>();
+	expectTypeOf(analytics.initialize()).toEqualTypeOf<Promise<void>>();
+	expectTypeOf(analytics.pageLeave()).toEqualTypeOf<void>();
 
 	analytics.track("user_signed_up", {
 		userId: "user_123",
@@ -118,6 +123,79 @@ describe("Server Analytics", () => {
 		expect(first).not.toBe(second);
 		expect(firstProvider.calls.initialize).toBe(1);
 		expect(secondProvider.calls.initialize).toBe(1);
+	});
+
+	it("delivers first-use operations once after provider initialization", async () => {
+		const provider = new DeferredInitializeProvider({ enabled: true });
+		const pending = createServerAnalytics({
+			events,
+			userTraits: typed<UserTraits>(),
+			providers: [provider],
+			validation: { onFailure: "throw" },
+		});
+
+		const trackPromise = pending.track("test_event", { action: "pending" });
+		const identifyPromise = pending.identify("user-pending", { plan: "pro" });
+		const pageViewPromise = pending.pageView({ path: "/pending" });
+		const pageLeaveResult = pending.pageLeave({ path: "/pending" });
+
+		expect(pageLeaveResult).toBeUndefined();
+		expect(provider.calls.track).toHaveLength(0);
+		expect(provider.calls.identify).toHaveLength(0);
+		expect(provider.calls.pageView).toHaveLength(0);
+		expect(provider.calls.pageLeave).toHaveLength(0);
+
+		provider.resolveInitialize();
+		await Promise.all([trackPromise, identifyPromise, pageViewPromise]);
+		await vi.waitFor(() => {
+			expect(provider.calls.pageLeave).toHaveLength(1);
+		});
+
+		expect(provider.calls.track).toHaveLength(1);
+		expect(provider.calls.identify).toHaveLength(1);
+		expect(provider.calls.pageView).toHaveLength(1);
+		expect(provider.calls.pageLeave).toHaveLength(1);
+	});
+
+	it("rejects awaited operations with the initialization error", async () => {
+		const provider = new DeferredInitializeProvider({ enabled: true });
+		const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+		const pending = createServerAnalytics({
+			events,
+			providers: [provider],
+		});
+		const initializationError = new Error("initialization failed");
+
+		const trackPromise = pending.track("test_event", {});
+		provider.rejectInitialize(initializationError);
+
+		await expect(trackPromise).rejects.toBe(initializationError);
+		errorSpy.mockRestore();
+	});
+
+	it("shares one provider initialization across concurrent callers", async () => {
+		const provider = new DeferredInitializeProvider({ enabled: true });
+		const pending = createServerAnalytics({
+			events,
+			providers: [provider],
+		});
+		let settled = false;
+
+		const initialization = Promise.all([
+			pending.initialize(),
+			pending.initialize(),
+		]).then(() => {
+			settled = true;
+		});
+		await Promise.resolve();
+		await Promise.resolve();
+
+		expect(provider.calls.initialize).toBe(1);
+		expect(settled).toBe(false);
+
+		provider.resolveInitialize();
+		await initialization;
+		expect(provider.calls.initialize).toBe(1);
 	});
 
 	it("tracks definition categories, properties, and server options", async () => {
@@ -295,11 +373,7 @@ describe("Server Analytics", () => {
 
 	it("accepts propertyless calls passing undefined properties with options", async () => {
 		const runtimeAnalytics = analytics as unknown as {
-			track(
-				name: string,
-				properties: unknown,
-				options: unknown,
-			): Promise<void>;
+			track(name: string, properties: unknown, options: unknown): Promise<void>;
 		};
 
 		await runtimeAnalytics.track("session_started", undefined, {

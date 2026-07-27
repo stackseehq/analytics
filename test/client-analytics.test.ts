@@ -11,7 +11,10 @@ import {
 	typed,
 } from "@/core/events";
 import { createClientAnalytics } from "@/client";
-import { MockAnalyticsProvider } from "./mock-provider";
+import {
+	DeferredInitializeProvider,
+	MockAnalyticsProvider,
+} from "./mock-provider";
 
 Object.defineProperty(window, "location", {
 	value: {
@@ -65,11 +68,9 @@ const events = defineEvents({
 	normalized: {
 		name: "normalized_event",
 		category: "conversion",
-		properties: z
-			.object({ label: z.string() })
-			.transform(({ label }) => ({
-				normalizedLabel: label.trim().toLowerCase(),
-			})),
+		properties: z.object({ label: z.string() }).transform(({ label }) => ({
+			normalizedLabel: label.trim().toLowerCase(),
+		})),
 	},
 });
 
@@ -85,6 +86,11 @@ function assertClientTypes(): void {
 	expectTypeOf(analytics.identify)
 		.parameter(1)
 		.toEqualTypeOf<UserTraits | undefined>();
+	expectTypeOf(analytics.initialize()).toEqualTypeOf<Promise<void>>();
+	expectTypeOf(analytics.identify("user-123")).toEqualTypeOf<void>();
+	expectTypeOf(analytics.pageView()).toEqualTypeOf<void>();
+	expectTypeOf(analytics.pageLeave()).toEqualTypeOf<void>();
+	expectTypeOf(analytics.reset()).toEqualTypeOf<void>();
 
 	analytics.track("page_viewed", {
 		path: "/",
@@ -141,6 +147,135 @@ describe("Client Analytics", () => {
 		expect(secondProvider.calls.initialize).toBe(1);
 	});
 
+	it("delivers identify once after provider initialization", async () => {
+		const provider = new DeferredInitializeProvider({ enabled: true });
+		const pending = createClientAnalytics({
+			events,
+			userTraits: typed<UserTraits>(),
+			providers: [provider],
+		});
+
+		pending.identify("user-pending", { plan: "pro" });
+		expect(provider.calls.identify).toHaveLength(0);
+
+		provider.resolveInitialize();
+		await vi.waitFor(() => {
+			expect(provider.calls.identify).toHaveLength(1);
+		});
+		expect(provider.calls.identify[0]).toEqual({
+			userId: "user-pending",
+			traits: { plan: "pro" },
+		});
+	});
+
+	it("delivers page lifecycle calls once after provider initialization", async () => {
+		const provider = new DeferredInitializeProvider({ enabled: true });
+		const pending = createClientAnalytics({
+			events,
+			providers: [provider],
+		});
+
+		pending.pageView({ phase: "pending-view" });
+		pending.pageLeave({ phase: "pending-leave" });
+		expect(provider.calls.pageView).toHaveLength(0);
+		expect(provider.calls.pageLeave).toHaveLength(0);
+
+		provider.resolveInitialize();
+		await vi.waitFor(() => {
+			expect(provider.calls.pageView).toHaveLength(1);
+			expect(provider.calls.pageLeave).toHaveLength(1);
+		});
+		expect(provider.calls.pageView[0].properties).toEqual({
+			phase: "pending-view",
+		});
+		expect(provider.calls.pageLeave[0].properties).toEqual({
+			phase: "pending-leave",
+		});
+	});
+
+	it("preserves identify and reset order while initialization is pending", async () => {
+		const provider = new DeferredInitializeProvider({ enabled: true });
+		const operationOrder: string[] = [];
+		const identify = provider.identify.bind(provider);
+		const reset = provider.reset.bind(provider);
+		provider.identify = (userId, traits) => {
+			operationOrder.push("identify");
+			identify(userId, traits);
+		};
+		provider.reset = () => {
+			operationOrder.push("reset");
+			reset();
+		};
+		const pending = createClientAnalytics({
+			events,
+			userTraits: typed<UserTraits>(),
+			providers: [provider],
+		});
+
+		pending.identify("user-pending", { plan: "pro" });
+		pending.reset();
+		expect(operationOrder).toEqual([]);
+		expect(provider.calls.identify).toHaveLength(0);
+		expect(provider.calls.reset).toBe(0);
+
+		provider.resolveInitialize();
+		await vi.waitFor(() => {
+			expect(operationOrder).toEqual(["identify", "reset"]);
+		});
+		expect(provider.calls.identify).toHaveLength(1);
+		expect(provider.calls.reset).toBe(1);
+	});
+
+	it("shares one provider initialization across concurrent callers", async () => {
+		const provider = new DeferredInitializeProvider({ enabled: true });
+		const pending = createClientAnalytics({
+			events,
+			providers: [provider],
+		});
+		let settled = false;
+
+		const initialization = Promise.all([
+			pending.initialize(),
+			pending.initialize(),
+		]).then(() => {
+			settled = true;
+		});
+		await Promise.resolve();
+		await Promise.resolve();
+
+		expect(provider.calls.initialize).toBe(1);
+		expect(settled).toBe(false);
+
+		provider.resolveInitialize();
+		await initialization;
+		expect(provider.calls.initialize).toBe(1);
+	});
+
+	it("retries provider initialization after a rejected attempt", async () => {
+		const provider = new DeferredInitializeProvider({ enabled: true });
+		const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+		const pending = createClientAnalytics({
+			events,
+			providers: [provider],
+		});
+		const initializationError = new Error("initialization failed");
+
+		const firstAttempt = pending.initialize();
+		provider.rejectInitialize(initializationError);
+		await expect(firstAttempt).rejects.toBe(initializationError);
+
+		const retry = pending.initialize();
+		const retryOutcome = retry.then(
+			() => ({ status: "fulfilled" as const }),
+			(error: unknown) => ({ status: "rejected" as const, error }),
+		);
+		expect(provider.calls.initialize).toBe(2);
+		provider.resolveInitialize();
+		expect(await retryOutcome).toEqual({ status: "fulfilled" });
+		expect(provider.isInitialized()).toBe(true);
+		errorSpy.mockRestore();
+	});
+
 	it("tracks registry categories with browser and session context", async () => {
 		await analytics.track("page_viewed", {
 			path: "/dashboard",
@@ -193,7 +328,9 @@ describe("Client Analytics", () => {
 
 	it("tracks page views and updates context", async () => {
 		analytics.pageView({ customProp: "value" });
-		await analytics.initialize();
+		await vi.waitFor(() => {
+			expect(mockProvider.calls.pageView).toHaveLength(1);
+		});
 
 		expect(mockProvider.calls.pageView[0]).toMatchObject({
 			properties: { customProp: "value" },
