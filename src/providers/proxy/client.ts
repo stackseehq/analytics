@@ -42,6 +42,12 @@ export interface ProxyProviderConfig {
 	 * Enable/disable the provider
 	 */
 	enabled?: boolean;
+
+	/**
+	 * Observe delivery failures from automatic size, timer, or page-lifecycle
+	 * flushes. Manual flush and shutdown failures are still rejected to callers.
+	 */
+	onDeliveryError?: (error: unknown) => void;
 }
 
 export class ProxyProvider extends BaseAnalyticsProvider {
@@ -49,6 +55,9 @@ export class ProxyProvider extends BaseAnalyticsProvider {
 	private config: ProxyProviderConfig;
 	private queue: ProxyEventV2[] = [];
 	private flushTimer?: ReturnType<typeof setTimeout>;
+	private flushPromise?: Promise<void>;
+	private observedAutomaticFlush?: Promise<void>;
+	private shuttingDown = false;
 	private readonly batchSize: number;
 	private readonly batchInterval: number;
 	private readonly retryAttempts: number;
@@ -67,13 +76,13 @@ export class ProxyProvider extends BaseAnalyticsProvider {
 		// Flush on page unload
 		if (typeof window !== "undefined") {
 			window.addEventListener("beforeunload", () => {
-				this.flush(true);
+				this.flushAutomatically(true);
 			});
 
 			// Also flush on visibility change (mobile browsers)
 			document.addEventListener("visibilitychange", () => {
 				if (document.visibilityState === "hidden") {
-					this.flush(true);
+					this.flushAutomatically(true);
 				}
 			});
 		}
@@ -145,49 +154,140 @@ export class ProxyProvider extends BaseAnalyticsProvider {
 	}
 
 	async shutdown(): Promise<void> {
-		await this.flush(true);
+		this.shuttingDown = true;
+		this.clearFlushTimer();
+
+		if (this.flushPromise) {
+			await this.flushPromise;
+		}
+
+		while (this.queue.length > 0) {
+			await this.flush(true);
+		}
+
 		this.log("Shutdown complete");
 	}
 
 	/**
 	 * Manually flush all queued events
 	 */
-	async flush(useBeacon = false): Promise<void> {
-		if (this.queue.length === 0) return;
+	flush(useBeacon = false): Promise<void> {
+		if (this.flushPromise) return this.flushPromise;
+		if (this.queue.length === 0) return Promise.resolve();
 
-		const events = [...this.queue];
-		this.queue = [];
-
-		if (this.flushTimer) {
-			clearTimeout(this.flushTimer);
-			this.flushTimer = undefined;
-		}
-
-		await this.sendEvents(events, useBeacon);
+		const promise = this.flushQueue(useBeacon).finally(() => {
+			if (this.flushPromise === promise) {
+				this.flushPromise = undefined;
+			}
+		});
+		this.flushPromise = promise;
+		return promise;
 	}
 
 	private queueEvent(event: ProxyEventV2): void {
+		if (this.shuttingDown) {
+			throw new Error("ProxyProvider has been shut down");
+		}
+
+		const wasEmpty = this.queue.length === 0;
 		this.queue.push(event);
 
 		// Auto-flush if batch size reached
 		if (this.queue.length >= this.batchSize) {
-			this.flush().catch((error) => {
-				console.error("[Proxy] Failed to flush events:", error);
-			});
+			this.flushAutomatically();
 			return;
 		}
 
-		// Clear existing timer and schedule a new one
-		// This ensures the timer always fires batchInterval ms after the LAST event
-		if (this.flushTimer) {
-			clearTimeout(this.flushTimer);
+		if (wasEmpty) {
+			this.scheduleFlushTimer();
+		}
+	}
+
+	private async flushQueue(useBeacon: boolean): Promise<void> {
+		const count = this.queue.length;
+		const events = this.queue.slice(0, count);
+		this.clearFlushTimer();
+
+		try {
+			await this.sendEvents(events, useBeacon);
+			this.queue.splice(0, count);
+			if (this.queue.length > 0 && !this.shuttingDown) {
+				this.scheduleFlushTimer();
+			}
+		} catch (error) {
+			if (this.queue.length > 0 && !this.shuttingDown) {
+				this.scheduleFlushTimer();
+			}
+			throw error;
+		}
+	}
+
+	private scheduleFlushTimer(): void {
+		if (this.shuttingDown || this.flushTimer || this.queue.length === 0) {
+			return;
 		}
 
 		this.flushTimer = setTimeout(() => {
-			this.flush().catch((error) => {
-				console.error("[Proxy] Failed to flush events:", error);
-			});
+			this.flushTimer = undefined;
+			this.flushAutomatically();
 		}, this.batchInterval);
+	}
+
+	private clearFlushTimer(): void {
+		if (!this.flushTimer) return;
+		clearTimeout(this.flushTimer);
+		this.flushTimer = undefined;
+	}
+
+	private flushAutomatically(useBeacon = false): void {
+		const promise = this.flush(useBeacon);
+		if (this.observedAutomaticFlush === promise) return;
+
+		this.observedAutomaticFlush = promise;
+		void promise.then(
+			() => {
+				if (this.observedAutomaticFlush === promise) {
+					this.observedAutomaticFlush = undefined;
+				}
+			},
+			(error: unknown) => {
+				if (this.observedAutomaticFlush === promise) {
+					this.observedAutomaticFlush = undefined;
+				}
+				this.reportAutomaticDeliveryError(error);
+			},
+		);
+	}
+
+	private reportAutomaticDeliveryError(error: unknown): void {
+		if (this.config.onDeliveryError) {
+			try {
+				this.config.onDeliveryError(error);
+				return;
+			} catch (callbackError) {
+				this.logSafeDeliveryError(callbackError);
+				return;
+			}
+		}
+
+		this.logSafeDeliveryError(error);
+	}
+
+	private logSafeDeliveryError(error: unknown): void {
+		console.error("[Proxy] Automatic delivery failed", {
+			errorClass: this.getErrorClass(error),
+		});
+	}
+
+	private getErrorClass(error: unknown): string {
+		if (error instanceof TypeError) return "TypeError";
+		if (error instanceof RangeError) return "RangeError";
+		if (error instanceof ReferenceError) return "ReferenceError";
+		if (error instanceof SyntaxError) return "SyntaxError";
+		if (error instanceof URIError) return "URIError";
+		if (error instanceof EvalError) return "EvalError";
+		if (error instanceof Error) return "Error";
+		return "NonError";
 	}
 
 	private async sendEvents(
@@ -202,19 +302,17 @@ export class ProxyProvider extends BaseAnalyticsProvider {
 				type: "application/json",
 			});
 			const sent = navigator.sendBeacon(this.config.endpoint, blob);
-			if (!sent) {
-				console.warn("[Proxy] Failed to send events via beacon");
-			}
-			return;
+			if (sent) return;
 		}
 
-		// Regular fetch with retry
-		await this.sendWithRetry(payload);
+		// A refused or unavailable beacon falls back to unload-safe fetch.
+		await this.sendWithRetry(payload, 0, useBeacon);
 	}
 
 	private async sendWithRetry(
 		payload: ProxyPayloadV2,
 		attempt = 0,
+		keepalive = false,
 	): Promise<void> {
 		try {
 			const response = await fetch(this.config.endpoint, {
@@ -226,6 +324,7 @@ export class ProxyProvider extends BaseAnalyticsProvider {
 				body: JSON.stringify(payload),
 				// Don't include credentials by default
 				credentials: "same-origin",
+				...(keepalive ? { keepalive: true } : {}),
 			});
 
 			if (!response.ok) {
@@ -236,13 +335,14 @@ export class ProxyProvider extends BaseAnalyticsProvider {
 		} catch (error) {
 			if (attempt < this.retryAttempts) {
 				const delay = this.calculateRetryDelay(attempt);
-				this.log(`Retry attempt ${attempt + 1} after ${delay}ms`, { error });
+				this.log(`Retry attempt ${attempt + 1} after ${delay}ms`, {
+					errorClass: this.getErrorClass(error),
+				});
 
 				await new Promise((resolve) => setTimeout(resolve, delay));
-				return this.sendWithRetry(payload, attempt + 1);
+				return this.sendWithRetry(payload, attempt + 1, keepalive);
 			}
 
-			console.error("[Proxy] Failed to send events after retries:", error);
 			throw error;
 		}
 	}

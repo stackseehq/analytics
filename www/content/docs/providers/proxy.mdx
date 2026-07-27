@@ -46,6 +46,46 @@ export const analytics = createClientAnalytics({
 await analytics.track("button_clicked", { buttonId: "signup-cta" });
 ```
 
+### Delivery behavior
+
+The client keeps queued events until the transport accepts their batch. A
+failed manual `flush()` rejects and leaves the events queued, so a later flush
+can try the same events again. Automatic size- and timer-based failures call
+`onDeliveryError` when you provide it; otherwise Trakoo logs only the error
+class and no event, payload, endpoint, header, or full error object.
+
+```typescript
+const proxy = new ProxyProvider({
+  endpoint: "/api/events",
+  batch: { size: 10, interval: 5000 },
+  onDeliveryError: (error) => {
+    reportAnalyticsDeliveryFailure(error);
+  },
+});
+```
+
+This is in-memory, at-least-once retry behavior rather than exactly-once or
+durable delivery. A batch can reach your endpoint more than once when the
+server accepts a request but its response is lost. Queued events can still be
+lost if the page or process terminates before the browser accepts a request.
+Make downstream event handling tolerant of duplicates when that matters.
+
+`batch.interval` starts when the first event enters an empty queue. Later
+events do not postpone that batch, so a steady stream cannot reset the timer
+indefinitely. Only one request is sent at a time; events added during that
+request stay in order for the next batch.
+
+On page lifecycle delivery, Trakoo first asks `sendBeacon` to accept the batch.
+If the browser has no `sendBeacon` implementation or refuses the batch, Trakoo
+falls back to `fetch` with `keepalive: true`, including your configured custom
+headers and retry policy.
+
+Call `await proxy.shutdown()` when your application owns an explicit teardown.
+Shutdown first awaits any request already in flight and then uses unload-safe
+delivery for the remaining queue. It resolves only after the queue is empty.
+If delivery fails, shutdown rejects and retains the events; once shutdown
+starts, identify, track, page-view, and reset calls reject new events.
+
 ## Server-side usage
 
 Your endpoint receives the batch and sends each event through normal server analytics. Import the same `appEvents` registry on both sides. A version 2 track event carries the original registry input, so the server runs its Standard Schema validator on untrusted raw input before any provider receives transformed properties. The wire format also preserves whether input was omitted, which keeps propertyless events distinct from an explicitly supplied `undefined`.
@@ -170,6 +210,21 @@ The browser collects raw event input and flushes a V2 batch once `batch.size` is
       type: "object",
       description: "Controls how events are buffered before they are sent.",
     },
+    retry: {
+      type: "object",
+      description:
+        "Controls retry attempts, backoff strategy, and initial delay.",
+    },
+    headers: {
+      type: "Record<string, string>",
+      description:
+        "Custom headers included in fetch requests, including keepalive fallback.",
+    },
+    onDeliveryError: {
+      type: "(error: unknown) => void",
+      description:
+        "Observes failures from automatic batch and page-lifecycle delivery.",
+    },
   }}
 />
 
@@ -183,7 +238,8 @@ The `batch` object accepts:
     },
     interval: {
       type: "number",
-      description: "Milliseconds to wait before flushing a partial batch.",
+      description:
+        "Maximum milliseconds from the first queued event before flushing a partial batch.",
     },
   }}
 />

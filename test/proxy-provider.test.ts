@@ -22,6 +22,29 @@ function trackWithInvocation(
 	return provider.track(event, context, invocation);
 }
 
+function deferred<T>() {
+	let resolve!: (value: T | PromiseLike<T>) => void;
+	let reject!: (reason?: unknown) => void;
+	const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+		resolve = resolvePromise;
+		reject = rejectPromise;
+	});
+	return { promise, resolve, reject };
+}
+
+const successfulResponse = {
+	ok: true,
+	status: 200,
+	statusText: "OK",
+};
+
+function payloadFromFetch(
+	fetchMock: ReturnType<typeof vi.fn>,
+	callIndex = 0,
+): ProxyPayloadV2 {
+	return JSON.parse(fetchMock.mock.calls[callIndex][1].body) as ProxyPayloadV2;
+}
+
 describe("ProxyProvider", () => {
 	let provider: ProxyProvider;
 	let fetchMock: ReturnType<typeof vi.fn>;
@@ -74,6 +97,7 @@ describe("ProxyProvider", () => {
 	});
 
 	afterEach(() => {
+		vi.useRealTimers();
 		vi.clearAllMocks();
 		vi.unstubAllGlobals();
 	});
@@ -187,8 +211,7 @@ describe("ProxyProvider", () => {
 				properties: {},
 			});
 
-			// Give it a moment to flush
-			await new Promise((resolve) => setTimeout(resolve, 10));
+			await provider.flush();
 
 			expect(fetchMock).toHaveBeenCalledTimes(1);
 			expect(fetchMock).toHaveBeenCalledWith(
@@ -225,7 +248,7 @@ describe("ProxyProvider", () => {
 			provider.pageView();
 			await provider.reset();
 
-			await new Promise((resolve) => setTimeout(resolve, 10));
+			await provider.flush();
 
 			const payload = JSON.parse(
 				fetchMock.mock.calls[0][1].body,
@@ -323,6 +346,546 @@ describe("ProxyProvider", () => {
 		});
 	});
 
+	describe("Delivery semantics", () => {
+		it("rejects an exhausted manual flush and retries the exact retained V2 events", async () => {
+			const failure = new Error("network unavailable");
+			fetchMock
+				.mockRejectedValueOnce(failure)
+				.mockResolvedValueOnce(successfulResponse);
+			provider = new ProxyProvider({
+				endpoint: "/api/events",
+				batch: { size: 100, interval: 10_000 },
+				retry: { attempts: 0 },
+			});
+
+			await trackWithInvocation(provider, {
+				action: "first_event",
+				category: "test",
+				properties: { sequence: 1 },
+			});
+			provider.identify("user-2", { plan: "pro" });
+
+			await expect(provider.flush()).rejects.toBe(failure);
+			const failedPayload = payloadFromFetch(fetchMock);
+			expect(failedPayload).toEqual({
+				version: 2,
+				events: [
+					{
+						type: "track",
+						name: "first_event",
+						input: { sequence: 1 },
+						inputProvided: true,
+						occurredAt: 1_234_567_890,
+						context: expect.any(Object),
+					},
+					{
+						type: "identify",
+						userId: "user-2",
+						traits: { plan: "pro" },
+					},
+				],
+			});
+
+			await provider.flush();
+			expect(fetchMock).toHaveBeenCalledTimes(2);
+			expect(payloadFromFetch(fetchMock, 1)).toEqual(failedPayload);
+		});
+
+		it("removes recovered retained events after one successful request", async () => {
+			fetchMock
+				.mockRejectedValueOnce(new Error("temporary"))
+				.mockResolvedValueOnce(successfulResponse);
+			provider = new ProxyProvider({
+				endpoint: "/api/events",
+				batch: { size: 100, interval: 10_000 },
+				retry: { attempts: 0 },
+			});
+			await trackWithInvocation(provider, {
+				action: "retained_event",
+				category: "test",
+				properties: {},
+			});
+
+			await expect(provider.flush()).rejects.toThrow("temporary");
+			await provider.flush();
+			await provider.flush();
+
+			expect(fetchMock).toHaveBeenCalledTimes(2);
+			expect(payloadFromFetch(fetchMock, 1).events).toHaveLength(1);
+			expect(payloadFromFetch(fetchMock, 1).events[0]).toMatchObject({
+				type: "track",
+				name: "retained_event",
+			});
+		});
+
+		it("shares the exact promise and request across concurrent flush calls", async () => {
+			const request = deferred<typeof successfulResponse>();
+			fetchMock.mockReturnValueOnce(request.promise);
+			provider = new ProxyProvider({
+				endpoint: "/api/events",
+				batch: { size: 100, interval: 10_000 },
+			});
+			await trackWithInvocation(provider, {
+				action: "shared_flush",
+				category: "test",
+				properties: {},
+			});
+
+			const firstFlush = provider.flush();
+			const secondFlush = provider.flush();
+
+			expect(secondFlush).toBe(firstFlush);
+			expect(fetchMock).toHaveBeenCalledTimes(1);
+			expect(fetchMock.mock.calls[0][1]).not.toHaveProperty("keepalive");
+			request.resolve(successfulResponse);
+			await firstFlush;
+		});
+
+		it("keeps events appended during delivery ordered after the acknowledged prefix", async () => {
+			const firstRequest = deferred<typeof successfulResponse>();
+			fetchMock
+				.mockReturnValueOnce(firstRequest.promise)
+				.mockResolvedValueOnce(successfulResponse);
+			provider = new ProxyProvider({
+				endpoint: "/api/events",
+				batch: { size: 100, interval: 10_000 },
+			});
+			await trackWithInvocation(provider, {
+				action: "prefix_one",
+				category: "test",
+				properties: {},
+			});
+			await trackWithInvocation(provider, {
+				action: "prefix_two",
+				category: "test",
+				properties: {},
+			});
+
+			const firstFlush = provider.flush();
+			await trackWithInvocation(provider, {
+				action: "appended_one",
+				category: "test",
+				properties: {},
+			});
+			await trackWithInvocation(provider, {
+				action: "appended_two",
+				category: "test",
+				properties: {},
+			});
+			firstRequest.resolve(successfulResponse);
+			await firstFlush;
+			await provider.flush();
+
+			expect(
+				payloadFromFetch(fetchMock, 0).events.map((event) =>
+					event.type === "track" ? event.name : event.type,
+				),
+			).toEqual(["prefix_one", "prefix_two"]);
+			expect(
+				payloadFromFetch(fetchMock, 1).events.map((event) =>
+					event.type === "track" ? event.name : event.type,
+				),
+			).toEqual(["appended_one", "appended_two"]);
+		});
+
+		it("reports one size-triggered failure while one shared delivery is in flight", async () => {
+			vi.useFakeTimers();
+			const request = deferred<typeof successfulResponse>();
+			const onDeliveryError = vi.fn();
+			fetchMock.mockReturnValueOnce(request.promise);
+			provider = new ProxyProvider({
+				endpoint: "/api/events",
+				batch: { size: 1, interval: 2000 },
+				retry: { attempts: 0 },
+				onDeliveryError,
+			});
+
+			await trackWithInvocation(provider, {
+				action: "threshold_one",
+				category: "test",
+				properties: {},
+			});
+			await trackWithInvocation(provider, {
+				action: "threshold_two",
+				category: "test",
+				properties: {},
+			});
+			await trackWithInvocation(provider, {
+				action: "threshold_three",
+				category: "test",
+				properties: {},
+			});
+			const failure = new TypeError("offline");
+			request.reject(failure);
+			await vi.advanceTimersByTimeAsync(0);
+
+			expect(fetchMock).toHaveBeenCalledTimes(1);
+			expect(onDeliveryError).toHaveBeenCalledTimes(1);
+			expect(onDeliveryError).toHaveBeenCalledWith(failure);
+
+			fetchMock.mockResolvedValueOnce(successfulResponse);
+			await provider.flush();
+			expect(
+				payloadFromFetch(fetchMock, 1).events.map((event) =>
+					event.type === "track" ? event.name : event.type,
+				),
+			).toEqual(["threshold_one", "threshold_two", "threshold_three"]);
+		});
+
+		it("logs only fixed error-class metadata for an automatic failure without a callback", async () => {
+			vi.useFakeTimers();
+			const consoleError = vi
+				.spyOn(console, "error")
+				.mockImplementation(() => {});
+			const secretError = new TypeError("error-secret");
+			secretError.name = "class-secret";
+			fetchMock.mockRejectedValueOnce(secretError);
+			provider = new ProxyProvider({
+				endpoint: "/api/events?config-secret",
+				headers: { Authorization: "header-secret" },
+				batch: { size: 1, interval: 2000 },
+				retry: { attempts: 0 },
+			});
+
+			await trackWithInvocation(provider, {
+				action: "event-secret",
+				category: "test",
+				properties: { value: "payload-secret" },
+			});
+			await vi.advanceTimersByTimeAsync(0);
+
+			expect(consoleError).toHaveBeenCalledTimes(1);
+			expect(consoleError).not.toHaveBeenCalledWith(
+				expect.anything(),
+				secretError,
+			);
+			const logged = JSON.stringify(consoleError.mock.calls);
+			expect(logged).toContain("TypeError");
+			expect(logged).not.toContain("error-secret");
+			expect(logged).not.toContain("class-secret");
+			expect(logged).not.toContain("event-secret");
+			expect(logged).not.toContain("payload-secret");
+			expect(logged).not.toContain("config-secret");
+			expect(logged).not.toContain("header-secret");
+
+			fetchMock.mockResolvedValueOnce(successfulResponse);
+			await provider.flush();
+		});
+
+		it("schedules one retry interval from a failed delivery without spinning", async () => {
+			vi.useFakeTimers();
+			const firstRequest = deferred<typeof successfulResponse>();
+			fetchMock
+				.mockReturnValueOnce(firstRequest.promise)
+				.mockResolvedValueOnce(successfulResponse);
+			provider = new ProxyProvider({
+				endpoint: "/api/events",
+				batch: { size: 100, interval: 2000 },
+				retry: { attempts: 0 },
+			});
+			await trackWithInvocation(provider, {
+				action: "retry_on_interval",
+				category: "test",
+				properties: {},
+			});
+			const firstFlush = provider.flush();
+
+			await vi.advanceTimersByTimeAsync(1000);
+			firstRequest.reject(new Error("offline"));
+			await expect(firstFlush).rejects.toThrow("offline");
+			await vi.advanceTimersByTimeAsync(1999);
+			expect(fetchMock).toHaveBeenCalledTimes(1);
+
+			await vi.advanceTimersByTimeAsync(1);
+			expect(fetchMock).toHaveBeenCalledTimes(2);
+			expect(payloadFromFetch(fetchMock, 1)).toEqual(
+				payloadFromFetch(fetchMock),
+			);
+		});
+
+		it("starts the batch interval at the first queued event", async () => {
+			vi.useFakeTimers();
+			provider = new ProxyProvider({
+				endpoint: "/api/events",
+				batch: { size: 100, interval: 2000 },
+			});
+
+			await trackWithInvocation(provider, {
+				action: "at_zero",
+				category: "test",
+				properties: {},
+			});
+			await vi.advanceTimersByTimeAsync(900);
+			await trackWithInvocation(provider, {
+				action: "at_nine_hundred",
+				category: "test",
+				properties: {},
+			});
+			await vi.advanceTimersByTimeAsync(900);
+			await trackWithInvocation(provider, {
+				action: "at_eighteen_hundred",
+				category: "test",
+				properties: {},
+			});
+			await vi.advanceTimersByTimeAsync(199);
+			expect(fetchMock).not.toHaveBeenCalled();
+
+			await vi.advanceTimersByTimeAsync(1);
+			expect(fetchMock).toHaveBeenCalledTimes(1);
+			expect(payloadFromFetch(fetchMock).events).toHaveLength(3);
+		});
+
+		it("starts a new timer for an event appended during a successful in-flight flush", async () => {
+			vi.useFakeTimers();
+			const firstRequest = deferred<typeof successfulResponse>();
+			fetchMock
+				.mockReturnValueOnce(firstRequest.promise)
+				.mockResolvedValueOnce(successfulResponse);
+			provider = new ProxyProvider({
+				endpoint: "/api/events",
+				batch: { size: 100, interval: 2000 },
+			});
+			await trackWithInvocation(provider, {
+				action: "in_flight_prefix",
+				category: "test",
+				properties: {},
+			});
+
+			const firstFlush = provider.flush();
+			await trackWithInvocation(provider, {
+				action: "appended_during_flight",
+				category: "test",
+				properties: {},
+			});
+			firstRequest.resolve(successfulResponse);
+			await firstFlush;
+			await vi.advanceTimersByTimeAsync(1999);
+			expect(fetchMock).toHaveBeenCalledTimes(1);
+
+			await vi.advanceTimersByTimeAsync(1);
+			expect(fetchMock).toHaveBeenCalledTimes(2);
+			expect(payloadFromFetch(fetchMock, 1).events).toMatchObject([
+				{ type: "track", name: "appended_during_flight" },
+			]);
+		});
+
+		it("accepts a beacon delivery and removes only its prefix", async () => {
+			const beaconSpy = vi.spyOn(navigator, "sendBeacon");
+			provider = new ProxyProvider({
+				endpoint: "/api/events",
+				batch: { size: 100, interval: 10_000 },
+			});
+			await trackWithInvocation(provider, {
+				action: "beacon_event",
+				category: "test",
+				properties: {},
+			});
+
+			await provider.flush(true);
+			await trackWithInvocation(provider, {
+				action: "after_beacon",
+				category: "test",
+				properties: {},
+			});
+			await provider.flush();
+
+			expect(beaconSpy).toHaveBeenCalledTimes(1);
+			expect(payloadFromFetch(fetchMock).events).toMatchObject([
+				{ type: "track", name: "after_beacon" },
+			]);
+		});
+
+		it("falls back from a refused beacon to keepalive fetch and retains on failure", async () => {
+			const beaconSpy = vi
+				.spyOn(navigator, "sendBeacon")
+				.mockReturnValue(false);
+			const failure = new Error("keepalive failed");
+			fetchMock
+				.mockRejectedValueOnce(failure)
+				.mockResolvedValueOnce(successfulResponse);
+			provider = new ProxyProvider({
+				endpoint: "/api/events",
+				headers: { "X-Proxy": "custom" },
+				batch: { size: 100, interval: 10_000 },
+				retry: { attempts: 0 },
+			});
+			await trackWithInvocation(provider, {
+				action: "keepalive_event",
+				category: "test",
+				properties: {},
+			});
+
+			await expect(provider.flush(true)).rejects.toBe(failure);
+			const firstPayload = payloadFromFetch(fetchMock);
+			expect(fetchMock.mock.calls[0][1]).toMatchObject({
+				keepalive: true,
+				headers: {
+					"Content-Type": "application/json",
+					"X-Proxy": "custom",
+				},
+			});
+			await provider.flush(true);
+			await provider.flush();
+
+			expect(beaconSpy).toHaveBeenCalledTimes(2);
+			expect(fetchMock).toHaveBeenCalledTimes(2);
+			expect(payloadFromFetch(fetchMock, 1)).toEqual(firstPayload);
+		});
+
+		it("uses keepalive fetch for unload delivery when sendBeacon is unavailable", async () => {
+			vi.stubGlobal("navigator", {
+				userAgent: "Mozilla/5.0 Test",
+				language: "en-US",
+			});
+			provider = new ProxyProvider({
+				endpoint: "/api/events",
+				batch: { size: 100, interval: 10_000 },
+			});
+			await trackWithInvocation(provider, {
+				action: "no_beacon",
+				category: "test",
+				properties: {},
+			});
+
+			await provider.flush(true);
+
+			expect(fetchMock).toHaveBeenCalledTimes(1);
+			expect(fetchMock.mock.calls[0][1]).toMatchObject({ keepalive: true });
+		});
+
+		it("observes a rejected page-lifecycle delivery without an unhandled promise", async () => {
+			vi.useFakeTimers();
+			vi.spyOn(navigator, "sendBeacon").mockReturnValue(false);
+			const failure = new Error("lifecycle offline");
+			const onDeliveryError = vi.fn();
+			fetchMock.mockRejectedValueOnce(failure);
+			provider = new ProxyProvider({
+				endpoint: "/api/events",
+				batch: { size: 100, interval: 2000 },
+				retry: { attempts: 0 },
+				onDeliveryError,
+			});
+			await trackWithInvocation(provider, {
+				action: "lifecycle_event",
+				category: "test",
+				properties: {},
+			});
+			const beforeUnload = vi
+				.mocked(window.addEventListener)
+				.mock.calls.find(([type]) => type === "beforeunload")?.[1];
+			expect(beforeUnload).toBeTypeOf("function");
+
+			(beforeUnload as EventListener)(new Event("beforeunload"));
+			await vi.advanceTimersByTimeAsync(0);
+
+			expect(onDeliveryError).toHaveBeenCalledTimes(1);
+			expect(onDeliveryError).toHaveBeenCalledWith(failure);
+			fetchMock.mockResolvedValueOnce(successfulResponse);
+			await provider.flush(true);
+		});
+
+		it("awaits an in-flight request before unload-flushing events queued before shutdown", async () => {
+			const firstRequest = deferred<typeof successfulResponse>();
+			const beaconSpy = vi.spyOn(navigator, "sendBeacon");
+			fetchMock.mockReturnValueOnce(firstRequest.promise);
+			provider = new ProxyProvider({
+				endpoint: "/api/events",
+				batch: { size: 100, interval: 10_000 },
+			});
+			await trackWithInvocation(provider, {
+				action: "already_sending",
+				category: "test",
+				properties: {},
+			});
+			const firstFlush = provider.flush();
+			await trackWithInvocation(provider, {
+				action: "queued_before_shutdown",
+				category: "test",
+				properties: {},
+			});
+
+			let shutdownResolved = false;
+			const shutdown = provider.shutdown().then(() => {
+				shutdownResolved = true;
+			});
+			await Promise.resolve();
+			expect(shutdownResolved).toBe(false);
+			expect(beaconSpy).not.toHaveBeenCalled();
+
+			firstRequest.resolve(successfulResponse);
+			await firstFlush;
+			await shutdown;
+
+			expect(shutdownResolved).toBe(true);
+			expect(beaconSpy).toHaveBeenCalledTimes(1);
+			const beaconPayload = JSON.parse(
+				await (beaconSpy.mock.calls[0][1] as Blob).text(),
+			) as ProxyPayloadV2;
+			expect(beaconPayload.events).toMatchObject([
+				{ type: "track", name: "queued_before_shutdown" },
+			]);
+		});
+
+		it("rejects shutdown with failed events retained", async () => {
+			vi.spyOn(navigator, "sendBeacon").mockReturnValue(false);
+			const failure = new Error("shutdown transport failed");
+			fetchMock
+				.mockRejectedValueOnce(failure)
+				.mockResolvedValueOnce(successfulResponse);
+			provider = new ProxyProvider({
+				endpoint: "/api/events",
+				batch: { size: 100, interval: 10_000 },
+				retry: { attempts: 0 },
+			});
+			await trackWithInvocation(provider, {
+				action: "shutdown_retained",
+				category: "test",
+				properties: {},
+			});
+
+			await expect(provider.shutdown()).rejects.toBe(failure);
+			await provider.flush(true);
+
+			expect(fetchMock).toHaveBeenCalledTimes(2);
+			expect(payloadFromFetch(fetchMock, 1)).toEqual(
+				payloadFromFetch(fetchMock),
+			);
+		});
+
+		it("rejects every enqueue after shutdown begins without leaving a request unresolved", async () => {
+			const request = deferred<typeof successfulResponse>();
+			fetchMock.mockReturnValueOnce(request.promise);
+			provider = new ProxyProvider({
+				endpoint: "/api/events",
+				batch: { size: 100, interval: 10_000 },
+			});
+			await trackWithInvocation(provider, {
+				action: "before_shutdown",
+				category: "test",
+				properties: {},
+			});
+			const flush = provider.flush();
+			const shutdown = provider.shutdown();
+			const shutDownMessage = "ProxyProvider has been shut down";
+
+			expect(() => provider.identify("late-user")).toThrow(shutDownMessage);
+			expect(() => provider.pageView()).toThrow(shutDownMessage);
+			await expect(
+				trackWithInvocation(provider, {
+					action: "late_track",
+					category: "test",
+					properties: {},
+				}),
+			).rejects.toThrow(shutDownMessage);
+			await expect(provider.reset()).rejects.toThrow(shutDownMessage);
+
+			request.resolve(successfulResponse);
+			await flush;
+			await shutdown;
+			expect(fetchMock).toHaveBeenCalledTimes(1);
+		});
+	});
+
 	describe("Context Enrichment", () => {
 		beforeEach(async () => {
 			provider = new ProxyProvider({
@@ -339,7 +902,7 @@ describe("ProxyProvider", () => {
 				properties: {},
 			});
 
-			await new Promise((resolve) => setTimeout(resolve, 10));
+			await provider.flush();
 
 			const payload = JSON.parse(
 				fetchMock.mock.calls[0][1].body,
@@ -363,7 +926,7 @@ describe("ProxyProvider", () => {
 				properties: {},
 			});
 
-			await new Promise((resolve) => setTimeout(resolve, 10));
+			await provider.flush();
 
 			const payload = JSON.parse(
 				fetchMock.mock.calls[0][1].body,
@@ -415,7 +978,7 @@ describe("ProxyProvider", () => {
 				},
 			);
 
-			await new Promise((resolve) => setTimeout(resolve, 10));
+			await provider.flush();
 
 			const payload = JSON.parse(
 				fetchMock.mock.calls[0][1].body,
@@ -520,6 +1083,7 @@ describe("ProxyProvider", () => {
 		});
 
 		it("should give up after max retries", async () => {
+			vi.useFakeTimers();
 			const consoleError = vi
 				.spyOn(console, "error")
 				.mockImplementation(() => {});
@@ -542,14 +1106,14 @@ describe("ProxyProvider", () => {
 				properties: {},
 			});
 
-			// Wait for all retries
-			await new Promise((resolve) => setTimeout(resolve, 100));
+			await vi.advanceTimersByTimeAsync(1);
+			await vi.advanceTimersByTimeAsync(2);
 
 			// Initial + 2 retries = 3 total attempts
 			expect(fetchMock).toHaveBeenCalledTimes(3);
 			expect(consoleError).toHaveBeenCalledWith(
-				"[Proxy] Failed to send events after retries:",
-				expect.any(Error),
+				"[Proxy] Automatic delivery failed",
+				{ errorClass: "Error" },
 			);
 
 			consoleError.mockRestore();
@@ -574,7 +1138,7 @@ describe("ProxyProvider", () => {
 				properties: {},
 			});
 
-			await new Promise((resolve) => setTimeout(resolve, 10));
+			await provider.flush();
 
 			expect(fetchMock).toHaveBeenCalledWith(
 				"/api/events",
