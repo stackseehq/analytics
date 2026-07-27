@@ -24,6 +24,25 @@ export class ProxyTrustError extends Error {
 	}
 }
 
+export type ProxyIngestErrorCode =
+	| "unauthorized"
+	| "rate_limited"
+	| "body_too_large"
+	| "method_not_allowed"
+	| "unsupported_media_type"
+	| "invalid_payload";
+
+export class ProxyIngestError extends Error {
+	constructor(
+		readonly code: ProxyIngestErrorCode,
+		readonly status: number,
+		message: string,
+	) {
+		super(message);
+		this.name = "ProxyIngestError";
+	}
+}
+
 export interface ProxyTrustedIdentity<
 	TTraits extends object = Record<string, unknown>,
 > {
@@ -37,6 +56,28 @@ export interface ProxyTrustedIdentity<
 export interface IngestProxyEventsConfig<
 	TUserTraits extends object = Record<string, unknown>,
 > {
+	/**
+	 * Maximum request-body size in bytes.
+	 * Default: 256 KiB.
+	 */
+	readonly maxBodyBytes?: number;
+
+	/**
+	 * Maximum number of events accepted in one request.
+	 * Default: 100.
+	 */
+	readonly maxBatchSize?: number;
+
+	/**
+	 * Authorize the request before its body is consumed.
+	 */
+	readonly authorize?: (request: Request) => boolean | Promise<boolean>;
+
+	/**
+	 * Apply application-owned admission or rate limiting before body parsing.
+	 */
+	readonly admit?: (request: Request) => boolean | Promise<boolean>;
+
 	/**
 	 * Enrich context with server-owned data.
 	 */
@@ -67,6 +108,9 @@ export interface IngestProxyEventsConfig<
 	 */
 	readonly onError?: (error: unknown) => void;
 }
+
+const DEFAULT_MAX_BODY_BYTES = 256 * 1024;
+const DEFAULT_MAX_BATCH_SIZE = 100;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -193,6 +237,117 @@ function parseProxyPayload(value: unknown): ProxyPayloadV2 {
 	}
 
 	return value as unknown as ProxyPayloadV2;
+}
+
+function configuredLimit(
+	value: number | undefined,
+	defaultValue: number,
+	name: "maxBodyBytes" | "maxBatchSize",
+): number {
+	const limit = value ?? defaultValue;
+	if (!Number.isFinite(limit) || !Number.isInteger(limit) || limit <= 0) {
+		throw new TypeError(`${name} must be a finite positive integer`);
+	}
+	return limit;
+}
+
+function mediaType(request: Request): string | undefined {
+	return request.headers
+		.get("content-type")
+		?.split(";", 1)[0]
+		?.trim()
+		.toLowerCase();
+}
+
+async function parseProxyRequest<TUserTraits extends object>(
+	request: Request,
+	config: IngestProxyEventsConfig<TUserTraits> | undefined,
+): Promise<ProxyPayloadV2> {
+	if (request.method.toUpperCase() !== "POST") {
+		throw new ProxyIngestError(
+			"method_not_allowed",
+			405,
+			"Proxy ingestion requires POST",
+		);
+	}
+
+	if (mediaType(request) !== "application/json") {
+		throw new ProxyIngestError(
+			"unsupported_media_type",
+			415,
+			"Proxy ingestion requires application/json",
+		);
+	}
+
+	if (config?.authorize && !(await config.authorize(request))) {
+		throw new ProxyIngestError(
+			"unauthorized",
+			401,
+			"Proxy request is unauthorized",
+		);
+	}
+
+	if (config?.admit && !(await config.admit(request))) {
+		throw new ProxyIngestError(
+			"rate_limited",
+			429,
+			"Proxy request was not admitted",
+		);
+	}
+
+	const maxBodyBytes = configuredLimit(
+		config?.maxBodyBytes,
+		DEFAULT_MAX_BODY_BYTES,
+		"maxBodyBytes",
+	);
+	const maxBatchSize = configuredLimit(
+		config?.maxBatchSize,
+		DEFAULT_MAX_BATCH_SIZE,
+		"maxBatchSize",
+	);
+
+	const contentLength = request.headers.get("content-length");
+	if (contentLength !== null) {
+		const declaredBytes = Number(contentLength);
+		if (Number.isFinite(declaredBytes) && declaredBytes > maxBodyBytes) {
+			throw new ProxyIngestError(
+				"body_too_large",
+				413,
+				"Proxy request body exceeds the configured limit",
+			);
+		}
+	}
+
+	const encodedBody = await request.arrayBuffer();
+	if (encodedBody.byteLength > maxBodyBytes) {
+		throw new ProxyIngestError(
+			"body_too_large",
+			413,
+			"Proxy request body exceeds the configured limit",
+		);
+	}
+
+	let rawPayload: unknown;
+	try {
+		rawPayload = JSON.parse(new TextDecoder().decode(encodedBody));
+	} catch {
+		throw new ProxyIngestError(
+			"invalid_payload",
+			400,
+			"Proxy request contains invalid JSON",
+		);
+	}
+
+	const proxyPayload = parseProxyPayload(rawPayload);
+	if (proxyPayload.events.length > maxBatchSize) {
+		throw new ProxyIngestError(
+			"body_too_large",
+			413,
+			"Proxy event batch exceeds the configured limit",
+		);
+	}
+
+	return proxyPayload;
 }
 
 function sanitizeClientContext(
@@ -326,6 +481,7 @@ function reportError<TUserTraits extends object>(
 	error: unknown,
 	config: IngestProxyEventsConfig<TUserTraits> | undefined,
 	message: string,
+	logIfUnhandled = true,
 ): void {
 	if (config?.onError) {
 		try {
@@ -335,7 +491,17 @@ function reportError<TUserTraits extends object>(
 		}
 		return;
 	}
-	console.error(message, error);
+	if (logIfUnhandled) {
+		console.error(message, {
+			name: error instanceof Error ? error.name : "UnknownError",
+			...(isRecord(error) && typeof error.code === "string"
+				? { code: error.code }
+				: {}),
+			...(isRecord(error) && typeof error.status === "number"
+				? { status: error.status }
+				: {}),
+		});
+	}
 }
 
 /**
@@ -351,13 +517,7 @@ export async function ingestProxyEvents<
 	config?: IngestProxyEventsConfig<TUserTraits>,
 ): Promise<void> {
 	try {
-		let rawPayload: unknown;
-		try {
-			rawPayload = await request.json();
-		} catch {
-			throw new ProxyTrustError("invalid_payload");
-		}
-		const proxyPayload = parseProxyPayload(rawPayload);
+		const proxyPayload = await parseProxyRequest(request, config);
 		const ip = config?.extractIp
 			? config.extractIp(request)
 			: extractIpFromRequest(request);
@@ -434,7 +594,12 @@ export async function ingestProxyEvents<
 			}
 		}
 	} catch (error) {
-		reportError(error, config, "[Proxy] Failed to ingest events:");
+		reportError(
+			error,
+			config,
+			"[Proxy] Failed to ingest events:",
+			!(error instanceof ProxyIngestError || error instanceof ProxyTrustError),
+		);
 		throw error;
 	}
 }
@@ -476,8 +641,29 @@ export function createProxyHandler<
 			await ingestProxyEvents(request, analytics, config);
 			return new Response("OK", { status: 200 });
 		} catch (error) {
-			console.error("[Proxy] Handler error:", error);
-			return new Response("Internal Server Error", { status: 500 });
+			if (error instanceof ProxyIngestError) {
+				return errorResponse(error.code, error.status);
+			}
+			if (
+				error instanceof ProxyTrustError &&
+				error.code === "invalid_payload"
+			) {
+				return errorResponse("invalid_payload", 400);
+			}
+			return errorResponse("internal_error", 500);
 		}
 	};
+}
+
+function errorResponse(
+	code: ProxyIngestErrorCode | "internal_error",
+	status: number,
+): Response {
+	return new Response(JSON.stringify({ ok: false, code }), {
+		status,
+		headers: {
+			"Content-Type": "application/json",
+			...(status === 405 ? { Allow: "POST" } : {}),
+		},
+	});
 }

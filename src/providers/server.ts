@@ -28,10 +28,12 @@ export type { EmitKitServerConfig } from "./emitkit/server.js";
 export {
 	ingestProxyEvents,
 	createProxyHandler,
+	ProxyIngestError,
 	ProxyTrustError,
 } from "./proxy/server.js";
 export type {
 	IngestProxyEventsConfig,
+	ProxyIngestErrorCode,
 	ProxyTrustedIdentity,
 	ProxyTrustErrorCode,
 } from "./proxy/server.js";

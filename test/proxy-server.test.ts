@@ -73,11 +73,48 @@ function payload(events: ProxyEventV2[]): ProxyPayloadV2 {
 }
 
 function requestFor(body: unknown, headers?: Record<string, string>): Request {
+	const requestHeaders = new Headers({ "Content-Type": "application/json" });
+	for (const [name, value] of Object.entries(headers ?? {})) {
+		requestHeaders.set(name, value);
+	}
+
 	return new Request("http://localhost/api/events", {
 		method: "POST",
-		headers,
+		headers: requestHeaders,
 		body: JSON.stringify(body),
 	});
+}
+
+function rawRequest(
+	body: string,
+	options: {
+		method?: string;
+		headers?: Record<string, string>;
+	} = {},
+): Request {
+	return new Request("http://localhost/api/events", {
+		method: options.method ?? "POST",
+		headers: options.headers,
+		...(options.method === "GET" ? {} : { body }),
+	});
+}
+
+function expectNoProviderDispatch(provider: MockAnalyticsProvider): void {
+	expect(provider.calls.identify).toHaveLength(0);
+	expect(provider.calls.track).toHaveLength(0);
+	expect(provider.calls.pageView).toHaveLength(0);
+	expect(provider.calls.pageLeave).toHaveLength(0);
+	expect(provider.calls.reset).toBe(0);
+}
+
+async function expectErrorResponse(
+	response: Response,
+	status: number,
+	code: string,
+): Promise<void> {
+	expect(response.status).toBe(status);
+	expect(response.headers.get("content-type")).toContain("application/json");
+	expect(await response.text()).toBe(JSON.stringify({ ok: false, code }));
 }
 
 describe("Proxy Server Ingestion", () => {
@@ -814,24 +851,330 @@ describe("Proxy Server Ingestion", () => {
 			expect(mockProvider.calls.track).toHaveLength(1);
 		});
 
-		it("returns 500 without echoing invalid request data", async () => {
-			const consoleError = vi
-				.spyOn(console, "error")
-				.mockImplementation(() => {});
+		it("reports direct-ingest parsing errors exactly once without retaining payload data", async () => {
+			const onError = vi.fn();
+			const request = rawRequest("private-invalid-json", {
+				headers: { "Content-Type": "application/json" },
+			});
+
+			await expect(
+				ingestProxyEvents(request, serverAnalytics, { onError }),
+			).rejects.toMatchObject({
+				name: "ProxyIngestError",
+				code: "invalid_payload",
+				status: 400,
+			});
+
+			expect(onError).toHaveBeenCalledTimes(1);
+			expect(JSON.stringify(onError.mock.calls)).not.toContain(
+				"private-invalid-json",
+			);
+			expectNoProviderDispatch(mockProvider);
+		});
+	});
+
+	describe("bounded request handler", () => {
+		it("rejects non-POST methods with the allowed method and no dispatch", async () => {
 			const handler = createProxyHandler(serverAnalytics);
-			const request = new Request("http://localhost/api/events", {
-				method: "POST",
-				body: "private-invalid-json",
+			const response = await handler(rawRequest("", { method: "GET" }));
+
+			await expectErrorResponse(response, 405, "method_not_allowed");
+			expect(response.headers.get("allow")).toBe("POST");
+			expectNoProviderDispatch(mockProvider);
+		});
+
+		it("rejects non-JSON media types before reading or dispatching", async () => {
+			const handler = createProxyHandler(serverAnalytics);
+			const request = rawRequest("private-body", {
+				headers: { "Content-Type": "text/plain" },
 			});
 
 			const response = await handler(request);
 
-			expect(response.status).toBe(500);
-			expect(await response.text()).toBe("Internal Server Error");
-			expect(JSON.stringify(consoleError.mock.calls)).not.toContain(
+			await expectErrorResponse(response, 415, "unsupported_media_type");
+			expect(request.bodyUsed).toBe(false);
+			expectNoProviderDispatch(mockProvider);
+		});
+
+		it("returns invalid_payload for malformed JSON exactly once", async () => {
+			const onError = vi.fn();
+			const handler = createProxyHandler(serverAnalytics, { onError });
+			const request = rawRequest("private-invalid-json", {
+				headers: { "Content-Type": "application/json" },
+			});
+
+			const response = await handler(request);
+
+			await expectErrorResponse(response, 400, "invalid_payload");
+			expect(onError).toHaveBeenCalledTimes(1);
+			expect(JSON.stringify(onError.mock.calls)).not.toContain(
 				"private-invalid-json",
 			);
-			consoleError.mockRestore();
+			expectNoProviderDispatch(mockProvider);
+		});
+
+		it.each([
+			["missing", { events: [] }],
+			["wrong", { version: 1, events: [] }],
+		])(
+			"maps a %s V2 version to safe invalid_payload JSON",
+			async (_label, body) => {
+				const onError = vi.fn();
+				const handler = createProxyHandler(serverAnalytics, { onError });
+
+				const response = await handler(requestFor(body));
+
+				await expectErrorResponse(response, 400, "invalid_payload");
+				expect(onError).toHaveBeenCalledTimes(1);
+				expectNoProviderDispatch(mockProvider);
+			},
+		);
+
+		it("rejects declared bodies above the limit without reading them", async () => {
+			const handler = createProxyHandler(serverAnalytics, {
+				maxBodyBytes: 32,
+			});
+			const request = rawRequest(JSON.stringify({ version: 2, events: [] }), {
+				headers: {
+					"Content-Type": "application/json",
+					"Content-Length": "33",
+				},
+			});
+
+			const response = await handler(request);
+
+			await expectErrorResponse(response, 413, "body_too_large");
+			expect(request.bodyUsed).toBe(false);
+			expectNoProviderDispatch(mockProvider);
+		});
+
+		it("measures actual UTF-8 bytes rather than JavaScript characters", async () => {
+			const body = JSON.stringify({
+				version: 2,
+				events: [],
+				padding: "ééé",
+			});
+			const handler = createProxyHandler(serverAnalytics, {
+				maxBodyBytes: body.length,
+			});
+			const request = rawRequest(body, {
+				headers: { "Content-Type": "application/json" },
+			});
+
+			const response = await handler(request);
+
+			await expectErrorResponse(response, 413, "body_too_large");
+			expect(request.bodyUsed).toBe(true);
+			expectNoProviderDispatch(mockProvider);
+		});
+
+		it("rejects event batches above the configured limit", async () => {
+			const handler = createProxyHandler(serverAnalytics, {
+				maxBatchSize: 1,
+			});
+
+			const response = await handler(
+				requestFor(
+					payload([
+						{
+							type: "track",
+							name: "event1",
+							inputProvided: true,
+							input: { position: 1 },
+							occurredAt: 1_725_000_000_000,
+						},
+						{
+							type: "track",
+							name: "event2",
+							inputProvided: true,
+							input: { position: 2 },
+							occurredAt: 1_725_000_000_001,
+						},
+					]),
+				),
+			);
+
+			await expectErrorResponse(response, 413, "body_too_large");
+			expectNoProviderDispatch(mockProvider);
+		});
+
+		it("rejects unauthorized requests before admission or body parsing", async () => {
+			const order: string[] = [];
+			const admit = vi.fn(() => {
+				order.push("admit");
+				return true;
+			});
+			const handler = createProxyHandler(serverAnalytics, {
+				authorize: async () => {
+					order.push("authorize");
+					return false;
+				},
+				admit,
+			});
+			const request = rawRequest("private-body", {
+				headers: { "Content-Type": "application/json" },
+			});
+
+			const response = await handler(request);
+
+			await expectErrorResponse(response, 401, "unauthorized");
+			expect(order).toEqual(["authorize"]);
+			expect(admit).not.toHaveBeenCalled();
+			expect(request.bodyUsed).toBe(false);
+			expectNoProviderDispatch(mockProvider);
+		});
+
+		it("runs admission after authorization and before body parsing", async () => {
+			const order: string[] = [];
+			const handler = createProxyHandler(serverAnalytics, {
+				authorize: () => {
+					order.push("authorize");
+					return true;
+				},
+				admit: async () => {
+					order.push("admit");
+					return false;
+				},
+			});
+			const request = rawRequest("private-body", {
+				headers: { "Content-Type": "application/json" },
+			});
+
+			const response = await handler(request);
+
+			await expectErrorResponse(response, 429, "rate_limited");
+			expect(order).toEqual(["authorize", "admit"]);
+			expect(request.bodyUsed).toBe(false);
+			expectNoProviderDispatch(mockProvider);
+		});
+
+		it("accepts JSON media-type casing and parameters within default limits", async () => {
+			const handler = createProxyHandler(serverAnalytics);
+			const response = await handler(
+				requestFor(
+					payload([
+						{
+							type: "track",
+							name: "event1",
+							inputProvided: true,
+							input: { source: "defaults" },
+							occurredAt: 1_725_000_000_000,
+						},
+					]),
+					{ "Content-Type": "Application/JSON; Charset=UTF-8" },
+				),
+			);
+
+			expect(response.status).toBe(200);
+			expect(await response.text()).toBe("OK");
+			expect(mockProvider.calls.track).toHaveLength(1);
+		});
+
+		it("returns a payload-free internal error when authorization throws", async () => {
+			const privateError = new Error("token=private-credential");
+			const onError = vi.fn();
+			const consoleError = vi
+				.spyOn(console, "error")
+				.mockImplementation(() => {});
+			const handler = createProxyHandler(serverAnalytics, {
+				authorize: () => {
+					throw privateError;
+				},
+				onError,
+			});
+			const request = rawRequest("private-request-body", {
+				headers: { "Content-Type": "application/json" },
+			});
+
+			try {
+				const response = await handler(request);
+
+				await expectErrorResponse(response, 500, "internal_error");
+				expect(onError).toHaveBeenCalledTimes(1);
+				expect(onError).toHaveBeenCalledWith(privateError);
+				expect(request.bodyUsed).toBe(false);
+				expect(JSON.stringify(consoleError.mock.calls)).not.toContain(
+					"private-credential",
+				);
+				expect(JSON.stringify(consoleError.mock.calls)).not.toContain(
+					"private-request-body",
+				);
+				expectNoProviderDispatch(mockProvider);
+			} finally {
+				consoleError.mockRestore();
+			}
+		});
+
+		it.each([0, -1, 1.5, Number.POSITIVE_INFINITY, Number.NaN])(
+			"rejects invalid maxBodyBytes %s before body consumption",
+			async (maxBodyBytes) => {
+				const onError = vi.fn();
+				const request = requestFor(payload([]));
+
+				await expect(
+					ingestProxyEvents(request, serverAnalytics, {
+						maxBodyBytes,
+						onError,
+					}),
+				).rejects.toBeInstanceOf(TypeError);
+
+				expect(onError).toHaveBeenCalledTimes(1);
+				expect(request.bodyUsed).toBe(false);
+				expectNoProviderDispatch(mockProvider);
+			},
+		);
+
+		it.each([0, -1, 1.5, Number.POSITIVE_INFINITY, Number.NaN])(
+			"rejects invalid maxBatchSize %s before body consumption",
+			async (maxBatchSize) => {
+				const onError = vi.fn();
+				const request = requestFor(payload([]));
+
+				await expect(
+					ingestProxyEvents(request, serverAnalytics, {
+						maxBatchSize,
+						onError,
+					}),
+				).rejects.toBeInstanceOf(TypeError);
+
+				expect(onError).toHaveBeenCalledTimes(1);
+				expect(request.bodyUsed).toBe(false);
+				expectNoProviderDispatch(mockProvider);
+			},
+		);
+
+		it("reports event-level identity errors once while continuing ingestion", async () => {
+			const onError = vi.fn();
+			const handler = createProxyHandler(serverAnalytics, { onError });
+
+			const response = await handler(
+				requestFor(
+					payload([
+						{
+							type: "identify",
+							userId: "untrusted-user",
+						},
+						{
+							type: "track",
+							name: "event1",
+							inputProvided: true,
+							input: { source: "after-identify" },
+							occurredAt: 1_725_000_000_000,
+						},
+					]),
+				),
+			);
+
+			expect(response.status).toBe(200);
+			expect(onError).toHaveBeenCalledTimes(1);
+			expect(onError).toHaveBeenCalledWith(
+				expect.objectContaining({
+					name: "ProxyTrustError",
+					code: "identity_required",
+				}),
+			);
+			expect(mockProvider.calls.identify).toHaveLength(0);
+			expect(mockProvider.calls.track).toHaveLength(1);
 		});
 	});
 });

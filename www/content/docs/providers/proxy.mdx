@@ -54,7 +54,7 @@ Your endpoint receives the batch and sends each event through normal server anal
 Protocol V2 is a breaking wire change and the server rejects V1 payloads. Deploy compatible client and server versions together. Registry skew can also produce `unknown_event`; set `validation.onError` or `debug` on `createServerAnalytics` to observe drops during rollout.
 :::
 
-Let trakoo own the whole route with `createProxyHandler`. The resolver below reads an authenticated session from server state rather than trusting the event's claimed user ID or traits:
+Let trakoo own the whole route with `createProxyHandler`. The resolver below reads an authenticated session from server state rather than trusting the event's claimed user ID or traits. Authorization and the application-owned rate limiter run before the request body is parsed:
 
 ```typescript title="app/api/events/route.ts"
 import { createServerAnalytics } from "trakoo/server";
@@ -74,6 +74,11 @@ const serverAnalytics = createServerAnalytics({
   ],
 });
 
+const analyticsRateLimiter = createApplicationRateLimiter({
+  limit: 60,
+  window: "1m",
+});
+
 async function resolveAuthenticatedIdentity(request: Request) {
   const session = await getAuthenticatedSession(request);
   if (!session) return undefined;
@@ -88,9 +93,17 @@ async function resolveAuthenticatedIdentity(request: Request) {
 }
 
 export const POST = createProxyHandler(serverAnalytics, {
+  authorize: async (request) => {
+    const session = await getAuthenticatedSession(request);
+    return Boolean(session);
+  },
+  admit: (request) =>
+    analyticsRateLimiter.allow(getAnalyticsRateLimitKey(request)),
   resolveIdentity: ({ request }) => resolveAuthenticatedIdentity(request),
 });
 ```
+
+`authorize` always runs before `admit`, and both hooks run before body parsing. Keep them cheap: inspect already-available authentication state and use a low-latency limiter rather than doing expensive analytics work. These hooks protect application policy, but they do not replace platform-level limits at your CDN, WAF, reverse proxy, or API gateway. Use platform limits to reject abusive traffic before it consumes application bandwidth and concurrency.
 
 Or keep your own handler and call `ingestProxyEvents` when you need to run authentication, enrichment, or logging around ingestion:
 
@@ -174,6 +187,71 @@ The `batch` object accepts:
     },
   }}
 />
+
+`createProxyHandler` and `ingestProxyEvents` accept the same server-ingestion options:
+
+<TypeTable
+  type={{
+    maxBodyBytes: {
+      type: "number",
+      default: "262144",
+      description:
+        "Maximum encoded request-body size in bytes (256 KiB). Must be a finite positive integer.",
+    },
+    maxBatchSize: {
+      type: "number",
+      default: "100",
+      description:
+        "Maximum number of V2 events accepted in one request. Must be a finite positive integer.",
+    },
+    authorize: {
+      type: "(request: Request) => boolean | Promise<boolean>",
+      description:
+        "Application authorization hook. Runs before admission and body parsing.",
+    },
+    admit: {
+      type: "(request: Request) => boolean | Promise<boolean>",
+      description:
+        "Application-owned admission or rate-limit hook. Runs before body parsing.",
+    },
+    resolveIdentity: {
+      type: "({ request, event }) => ProxyTrustedIdentity | undefined | Promise<...>",
+      description:
+        "Derives trusted identity from authenticated server state for each event.",
+    },
+    enrichContext: {
+      type: "(request: Request) => Partial<EventContext>",
+      description: "Adds server-owned event context.",
+    },
+    extractIp: {
+      type: "(request: Request) => string | undefined",
+      description: "Overrides extraction from standard forwarding headers.",
+    },
+    onError: {
+      type: "(error: unknown) => void",
+      description:
+        "Observes ingestion and event-processing errors without changing safe HTTP responses.",
+    },
+  }}
+/>
+
+The default request limit is 256 KiB and the default batch limit is 100 events. The body limit uses encoded UTF-8 bytes, not JavaScript character count. Requests must use `POST` with an `application/json` media type; parameters such as `charset=utf-8` are accepted.
+
+### Handler responses
+
+The handler returns stable, payload-free JSON for rejected requests:
+
+| Status | Code                     | Meaning                                                              |
+| ------ | ------------------------ | -------------------------------------------------------------------- |
+| `400`  | `invalid_payload`        | Malformed JSON, unsupported protocol version, or invalid V2 envelope |
+| `401`  | `unauthorized`           | `authorize` rejected the request                                     |
+| `405`  | `method_not_allowed`     | The request did not use `POST`; the response includes `Allow: POST`  |
+| `413`  | `body_too_large`         | The encoded body or event batch exceeded its configured limit        |
+| `415`  | `unsupported_media_type` | The media type was not `application/json`                            |
+| `429`  | `rate_limited`           | `admit` rejected the request                                         |
+| `500`  | `internal_error`         | An unexpected hook or ingestion failure occurred                     |
+
+Expected rejection bodies have the shape `{ "ok": false, "code": "<code>" }` and do not include request data or validation details. Event-level failures such as an identify event without resolver-owned identity are sent to `onError` while the rest of the valid batch continues; they do not become an HTTP failure.
 
 :::tip
 Server providers are stateless. `createProxyHandler` and `ingestProxyEvents` process each request and return — there is no long-lived instance to flush. See [Client vs Server](/docs/core-concepts/client-vs-server).
