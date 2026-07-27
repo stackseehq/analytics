@@ -67,6 +67,12 @@ await serverAnalytics.track('user_signed_up', {
 });
 ```
 
+For server `pageView` calls, PostHog uses `context.user.userId` as the distinct
+ID, falls back to the email supplied in that call, and otherwise records the
+page view as anonymous. Server identity is never retained between calls, so
+include the relevant user context on every page view that should be attributed
+to a user.
+
 :::warning[Always flush on the server]
 The Node SDK queues events and sends them in batches. In serverless or edge functions, call `serverAnalytics.shutdown()` before the function returns so queued events are not lost. See [Client vs Server](/docs/core-concepts/client-vs-server) for the full picture.
 :::

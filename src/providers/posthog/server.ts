@@ -96,9 +96,11 @@ export class PostHogServerProvider extends BaseAnalyticsProvider {
 				referrer: context.page.referrer,
 			}),
 		};
+		const distinctId =
+			context?.user?.userId || context?.user?.email || "anonymous";
 
 		this.client.capture({
-			distinctId: "anonymous",
+			distinctId,
 			event: "$pageview",
 			properties: pageProperties,
 		});
