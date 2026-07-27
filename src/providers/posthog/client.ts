@@ -3,57 +3,76 @@ import { BaseAnalyticsProvider } from "@/providers/base.provider.js";
 import type { PostHog, PostHogConfig, Properties } from "posthog-js";
 import { isBrowser } from "@/utils/environment.js";
 
+export type PostHogClientConfig = Partial<PostHogConfig> & {
+	token: string;
+	instanceName?: string;
+	debug?: boolean;
+	enabled?: boolean;
+};
+
+let posthogProviderSequence = 0;
+const nextInstanceName = () => `trakoo_${++posthogProviderSequence}`;
+
 export class PostHogClientProvider extends BaseAnalyticsProvider {
 	name = "PostHog-Client";
 	private posthog?: PostHog;
 	private initialized = false;
-	private config: Partial<PostHogConfig> & { token: string };
+	private initializePromise?: Promise<void>;
+	private readonly config: PostHogClientConfig;
+	private readonly instanceName: string;
 
-	constructor(
-		config: Partial<PostHogConfig> & {
-			token: string;
-			debug?: boolean;
-			enabled?: boolean;
-		},
-	) {
+	constructor(config: PostHogClientConfig) {
 		super({ debug: config.debug, enabled: config.enabled });
 		this.config = config;
+		this.instanceName = config.instanceName ?? nextInstanceName();
 	}
 
-	async initialize(): Promise<void> {
-		if (!this.isEnabled()) return;
-		if (this.initialized) return;
+	initialize(): Promise<void> {
+		if (!this.isEnabled() || this.initialized) return Promise.resolve();
+		if (this.initializePromise) return this.initializePromise;
 
 		// Check if we're in a browser environment
 		if (!isBrowser()) {
 			this.log("Skipping initialization - not in browser environment");
-			return;
+			return Promise.resolve();
 		}
 
+		this.initializePromise = this.initializePostHog().catch((error) => {
+			this.initializePromise = undefined;
+			console.error("[PostHog-Client] Failed to initialize:", error);
+			throw error;
+		});
+		return this.initializePromise;
+	}
+
+	private async initializePostHog(): Promise<void> {
 		// Validate config has required fields
 		if (!this.config.token || typeof this.config.token !== "string") {
 			throw new Error("PostHog requires a token");
 		}
 
-		try {
-			// Dynamically import PostHog to avoid SSR issues
-			const { default: posthog } = await import("posthog-js");
+		// Dynamically import PostHog to avoid SSR issues
+		const { default: posthog } = await import("posthog-js");
 
-			const { token, debug: configDebug, ...posthogConfig } = this.config;
+		const {
+			token,
+			instanceName: _instanceName,
+			enabled: _enabled,
+			debug: configDebug,
+			...posthogConfig
+		} = this.config;
 
-			posthog.init(token, {
+		this.posthog = posthog.init(
+			token,
+			{
 				...posthogConfig,
 				debug: configDebug ?? this.debug,
-			});
+			},
+			this.instanceName,
+		);
+		this.initialized = true;
 
-			this.posthog = posthog;
-			this.initialized = true;
-
-			this.log("Initialized successfully", this.config);
-		} catch (error) {
-			console.error("[PostHog-Client] Failed to initialize:", error);
-			throw error;
-		}
+		this.log("Initialized successfully", this.config);
 	}
 
 	identify(userId: string, traits?: Record<string, unknown>): void {

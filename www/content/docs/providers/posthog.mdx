@@ -26,45 +26,71 @@ pnpm install trakoo posthog-js posthog-node
 Use `PostHogClientProvider` from `trakoo/providers/client`. It accepts every option from the PostHog JS SDK, so anything you can pass to `posthog.init()` works here.
 
 ```typescript title="lib/analytics.ts"
-import { createClientAnalytics } from 'trakoo/client';
-import { PostHogClientProvider } from 'trakoo/providers/client';
-import { appEvents } from '@/lib/events';
+import { createClientAnalytics } from "trakoo/client";
+import { PostHogClientProvider } from "trakoo/providers/client";
+import { appEvents } from "@/lib/events";
 
 export const analytics = createClientAnalytics({
   events: appEvents,
   providers: [
     new PostHogClientProvider({
       token: import.meta.env.VITE_POSTHOG_KEY,
-      api_host: import.meta.env.VITE_POSTHOG_HOST
-    })
-  ]
+      api_host: import.meta.env.VITE_POSTHOG_HOST,
+    }),
+  ],
 });
 ```
+
+### Browser instance isolation
+
+Every `PostHogClientProvider` uses its own named PostHog SDK object by default.
+That keeps each provider's live configuration and calls to `identify`,
+`capture`, and `reset` isolated from other Trakoo instances.
+
+Most applications should omit `instanceName`. It is an advanced escape hatch
+for deliberately selecting a PostHog named instance:
+
+```typescript
+new PostHogClientProvider({
+  token: import.meta.env.VITE_POSTHOG_KEY,
+  instanceName: "marketing",
+});
+```
+
+Reusing the same `instanceName` opts providers into sharing that named SDK
+object. The instance name does not change PostHog's persistence semantics:
+stored identity continues to use the project token by default, or
+`persistence_name` when you configure one. Generated instance names therefore
+do not make browser identity disposable across normal navigation or reloads.
 
 ## Server-side usage
 
 Use `PostHogServerProvider` from `trakoo/providers/server`. Server analytics is stateless, so pass user context with each call.
 
 ```typescript title="lib/server-analytics.ts"
-import { createServerAnalytics } from 'trakoo/server';
-import { PostHogServerProvider } from 'trakoo/providers/server';
-import { appEvents } from '@/lib/events';
+import { createServerAnalytics } from "trakoo/server";
+import { PostHogServerProvider } from "trakoo/providers/server";
+import { appEvents } from "@/lib/events";
 
 export const serverAnalytics = createServerAnalytics({
   events: appEvents,
   providers: [
     new PostHogServerProvider({
       apiKey: process.env.POSTHOG_API_KEY!,
-      host: 'https://us.i.posthog.com'
-    })
-  ]
+      host: "https://us.i.posthog.com",
+    }),
+  ],
 });
 
-await serverAnalytics.track('user_signed_up', {
-  plan: 'pro'
-}, {
-  userId: 'user_123'
-});
+await serverAnalytics.track(
+  "user_signed_up",
+  {
+    plan: "pro",
+  },
+  {
+    userId: "user_123",
+  },
+);
 ```
 
 For server `pageView` calls, PostHog uses `context.user.userId` as the distinct
@@ -86,23 +112,29 @@ The Node SDK queues events and sends them in batches. In serverless or edge func
     token: {
       type: "string",
       required: true,
-      description: "Your PostHog project API key."
+      description: "Your PostHog project API key.",
     },
     api_host: {
       type: "string",
       default: "https://us.i.posthog.com",
-      description: "PostHog instance URL. Change this for EU or self-hosted."
+      description: "PostHog instance URL. Change this for EU or self-hosted.",
     },
     debug: {
       type: "boolean",
       default: "false",
-      description: "Log PostHog SDK activity to the console."
+      description: "Log PostHog SDK activity to the console.",
     },
     enabled: {
       type: "boolean",
       default: "true",
-      description: "Set to false to disable the provider without removing it."
-    }
+      description: "Set to false to disable the provider without removing it.",
+    },
+    instanceName: {
+      type: "string",
+      required: false,
+      description:
+        "Advanced: select a named PostHog SDK instance. Omit for an isolated Trakoo-managed instance.",
+    },
   }}
 />
 
@@ -113,23 +145,23 @@ The Node SDK queues events and sends them in batches. In serverless or edge func
     apiKey: {
       type: "string",
       required: true,
-      description: "Your PostHog project API key."
+      description: "Your PostHog project API key.",
     },
     host: {
       type: "string",
       default: "https://us.i.posthog.com",
-      description: "PostHog instance URL. Change this for EU or self-hosted."
+      description: "PostHog instance URL. Change this for EU or self-hosted.",
     },
     flushAt: {
       type: "number",
       default: "20",
-      description: "Number of queued events that triggers a flush."
+      description: "Number of queued events that triggers a flush.",
     },
     flushInterval: {
       type: "number",
       default: "10000",
-      description: "Milliseconds to wait before flushing queued events."
-    }
+      description: "Milliseconds to wait before flushing queued events.",
+    },
   }}
 />
 
@@ -139,10 +171,18 @@ The Node SDK queues events and sends them in batches. In serverless or edge func
   <Card title="PostHog docs" href="https://posthog.com/docs" icon="book-open">
     Feature flags, session replay, and product analytics.
   </Card>
-  <Card title="PostHog JS SDK" href="https://posthog.com/docs/libraries/js" icon="code">
+  <Card
+    title="PostHog JS SDK"
+    href="https://posthog.com/docs/libraries/js"
+    icon="code"
+  >
     Every client option you can pass through.
   </Card>
-  <Card title="PostHog Node SDK" href="https://posthog.com/docs/libraries/node" icon="server">
+  <Card
+    title="PostHog Node SDK"
+    href="https://posthog.com/docs/libraries/node"
+    icon="server"
+  >
     Server-side capture and flushing.
   </Card>
   <Card title="Routing" href="/docs/providers#routing" icon="route">
