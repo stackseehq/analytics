@@ -534,6 +534,14 @@ export class BrowserAnalytics<
 	): Promise<void> {
 		if (!this.enabled) return;
 
+		const invocation = {
+			timestamp: Date.now(),
+			userId: this.userId,
+			sessionId: this.sessionId,
+			userTraits: this.userTraits,
+			context: { ...this.context },
+		};
+
 		// Ensure initialization but don't block the track call
 		await this.ensureInitialized();
 
@@ -553,23 +561,23 @@ export class BrowserAnalytics<
 			action: resolved.name,
 			category: resolved.category,
 			properties: resolved.properties,
-			timestamp: Date.now(),
-			userId: this.userId,
-			sessionId: this.sessionId,
+			timestamp: invocation.timestamp,
+			userId: invocation.userId,
+			sessionId: invocation.sessionId,
 		};
 
 		// Build context with user data
 		const contextWithUser: EventContext<TUserTraits> = {
-			...this.context,
+			...invocation.context,
 			user:
-				this.userId || this.userTraits
+				invocation.userId || invocation.userTraits
 					? {
-							userId: this.userId,
+							userId: invocation.userId,
 							email:
-								this.userTraits && "email" in this.userTraits
-									? (this.userTraits.email as string | undefined)
+								invocation.userTraits && "email" in invocation.userTraits
+									? (invocation.userTraits.email as string | undefined)
 									: undefined,
-							traits: this.userTraits,
+							traits: invocation.userTraits,
 						}
 					: undefined,
 		};

@@ -1,6 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
+import type { StandardSchemaV1 } from "@standard-schema/spec";
 import { expect, expectTypeOf, beforeEach, describe, it, vi } from "vitest";
 import { z } from "zod";
 import type { BrowserAnalytics } from "@/adapters/client/browser-analytics";
@@ -276,6 +277,64 @@ describe("Client Analytics", () => {
 		errorSpy.mockRestore();
 	});
 
+	it("snapshots identity and session while initialization is pending", async () => {
+		const provider = new DeferredInitializeProvider({ enabled: true });
+		const pending = createClientAnalytics({
+			events,
+			userTraits: typed<UserTraits>(),
+			providers: [provider],
+		});
+
+		pending.identify("user-a", {
+			email: "a@example.com",
+			name: "User A",
+			plan: "pro",
+		});
+		const initialSessionId = (pending as unknown as { sessionId: string })
+			.sessionId;
+		const firstTrack = pending.track("test_event", {
+			data: "before-account-switch",
+		});
+
+		pending.reset();
+		pending.identify("user-b", {
+			email: "b@example.com",
+			name: "User B",
+			plan: "free",
+		});
+		provider.resolveInitialize();
+		await firstTrack;
+
+		expect(provider.calls.track[0].event).toMatchObject({
+			userId: "user-a",
+			sessionId: initialSessionId,
+		});
+		expect(provider.calls.track[0].context?.user).toEqual({
+			userId: "user-a",
+			email: "a@example.com",
+			traits: {
+				email: "a@example.com",
+				name: "User A",
+				plan: "pro",
+			},
+		});
+
+		await pending.track("test_event", { data: "after-account-switch" });
+		expect(provider.calls.track[1].event).toMatchObject({
+			userId: "user-b",
+		});
+		expect(provider.calls.track[1].event.sessionId).not.toBe(initialSessionId);
+		expect(provider.calls.track[1].context?.user).toEqual({
+			userId: "user-b",
+			email: "b@example.com",
+			traits: {
+				email: "b@example.com",
+				name: "User B",
+				plan: "free",
+			},
+		});
+	});
+
 	it("tracks registry categories with browser and session context", async () => {
 		await analytics.track("page_viewed", {
 			path: "/dashboard",
@@ -390,6 +449,108 @@ describe("Client Analytics", () => {
 		expect(second.calls.track[0].event.properties).toBe(
 			first.calls.track[0].event.properties,
 		);
+	});
+
+	it("snapshots identity and timestamp before async schema validation", async () => {
+		type DelayedProperties = { data: string };
+		let resolveValidation!: (
+			result: StandardSchemaV1.Result<DelayedProperties>,
+		) => void;
+		let markValidationStarted!: () => void;
+		const validation = new Promise<StandardSchemaV1.Result<DelayedProperties>>(
+			(resolve) => {
+				resolveValidation = resolve;
+			},
+		);
+		const validationStarted = new Promise<void>((resolve) => {
+			markValidationStarted = resolve;
+		});
+		const controlledSchema: StandardSchemaV1<
+			DelayedProperties,
+			DelayedProperties
+		> = {
+			"~standard": {
+				version: 1,
+				vendor: "trakoo-test",
+				validate: () => {
+					markValidationStarted();
+					return validation;
+				},
+			},
+		};
+		const delayedEvents = defineEvents({
+			delayed: {
+				name: "delayed_event",
+				category: "custom-category",
+				properties: controlledSchema,
+			},
+		});
+		const provider = new MockAnalyticsProvider({ enabled: true });
+		const delayed = createClientAnalytics({
+			events: delayedEvents,
+			userTraits: typed<UserTraits>(),
+			providers: [provider],
+			validation: { onFailure: "throw" },
+		});
+		await delayed.initialize();
+		delayed.identify("user-a", {
+			email: "a@example.com",
+			name: "User A",
+			plan: "pro",
+		});
+
+		let currentTimestamp = 1_000;
+		const now = vi
+			.spyOn(Date, "now")
+			.mockImplementation(() => currentTimestamp);
+		try {
+			const firstTrack = delayed.track("delayed_event", {
+				data: "before-account-switch",
+			});
+			await validationStarted;
+
+			currentTimestamp = 2_000;
+			const switchTimestamp = Date.now();
+			delayed.reset();
+			delayed.identify("user-b", {
+				email: "b@example.com",
+				name: "User B",
+				plan: "free",
+			});
+			currentTimestamp = 3_000;
+			resolveValidation({ value: { data: "validated" } });
+			await firstTrack;
+
+			expect(provider.calls.track[0].event.userId).toBe("user-a");
+			expect(provider.calls.track[0].event.timestamp).toBeLessThanOrEqual(
+				switchTimestamp,
+			);
+			expect(provider.calls.track[0].context?.user).toEqual({
+				userId: "user-a",
+				email: "a@example.com",
+				traits: {
+					email: "a@example.com",
+					name: "User A",
+					plan: "pro",
+				},
+			});
+
+			await delayed.track("delayed_event", {
+				data: "after-account-switch",
+			});
+			expect(provider.calls.track[1].event.userId).toBe("user-b");
+			expect(provider.calls.track[1].context?.user).toEqual({
+				userId: "user-b",
+				email: "b@example.com",
+				traits: {
+					email: "b@example.com",
+					name: "User B",
+					plan: "free",
+				},
+			});
+		} finally {
+			now.mockRestore();
+		}
 	});
 
 	it("drops invalid properties by default after reporting once", async () => {
