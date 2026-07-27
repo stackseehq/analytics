@@ -48,6 +48,11 @@ describe("BentoServerProvider", () => {
 		});
 		expect(sdk.track).not.toHaveBeenCalled();
 		expect(warnSpy).toHaveBeenCalledOnce();
+		const eventWarning = warnSpy.mock.calls[0]?.[0] as string;
+		expect(eventWarning).toContain(
+			"current call's user context or event userId",
+		);
+		expect(eventWarning).not.toContain("call identify() with");
 
 		await provider.track(
 			{ action: "current_context", category: "engagement", properties: {} },
@@ -76,6 +81,9 @@ describe("BentoServerProvider", () => {
 
 		await provider.pageView();
 		expect(sdk.track).toHaveBeenCalledTimes(2);
+		const pageViewWarning = warnSpy.mock.calls[1]?.[0] as string;
+		expect(pageViewWarning).toContain("current call's user context");
+		expect(pageViewWarning).not.toContain("call identify() with");
 
 		await provider.reset();
 		await provider.track({

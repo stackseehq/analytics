@@ -148,7 +148,7 @@ export class BentoServerProvider extends BaseAnalyticsProvider {
 					"Anonymous events are not currently supported by the Bento Node SDK. " +
 					"For now, use the Bento client provider for anonymous tracking. " +
 					"If you're using a proxy, use the hybrid pattern as described in the docs. " +
-					"For identified users, call identify() with a valid email before tracking events.",
+					"For identified events, provide a valid email in the current call's user context or event userId; calling identify() earlier does not set event identity.",
 			);
 			return;
 		}
@@ -210,7 +210,7 @@ export class BentoServerProvider extends BaseAnalyticsProvider {
 					"Anonymous events are not currently supported by the Bento Node SDK. " +
 					"For now, use the Bento client provider for anonymous tracking. " +
 					"If you're using a proxy, use the hybrid pattern as described in the docs. " +
-					"For identified users, call identify() with a valid email before tracking events.",
+					"For identified page views, provide a valid email in the current call's user context; calling identify() earlier does not set page identity.",
 			);
 			return;
 		}
