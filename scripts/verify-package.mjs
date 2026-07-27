@@ -13,7 +13,8 @@ import { assertRootBundleNeutral } from "./package-verification.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const invokedAsScript =
-	process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+	process.argv[1] &&
+	resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 
 const run = (command, args, cwd = root) =>
 	execFileSync(command, args, { cwd, encoding: "utf8", stdio: "pipe" });
@@ -74,111 +75,106 @@ if (invokedAsScript) {
 	let tarballPath;
 
 	try {
-	run("pnpm", ["build"]);
-	assertDeclarationTargetsExist(join(root, "dist"), [
-		"index.d.ts",
-		"client/index.d.ts",
-		"server/index.d.ts",
-		"adapters/server/server-analytics.d.ts",
-	]);
-	const packResult = JSON.parse(run("npm", ["pack", "--json"]));
-	tarballPath = resolve(root, packResult[0].filename);
+		run("pnpm", ["build"]);
+		assertDeclarationTargetsExist(join(root, "dist"), [
+			"index.d.ts",
+			"client/index.d.ts",
+			"server/index.d.ts",
+			"adapters/server/server-analytics.d.ts",
+		]);
+		const packResult = JSON.parse(run("npm", ["pack", "--json"]));
+		tarballPath = resolve(root, packResult[0].filename);
 
-	run("npm", ["init", "-y"], consumerDirectory);
-	run(
-		"npm",
-		["install", "--ignore-scripts", tarballPath],
-		consumerDirectory,
-	);
+		run("npm", ["init", "-y"], consumerDirectory);
+		run("npm", ["install", "--ignore-scripts", tarballPath], consumerDirectory);
 
-	writeFileSync(join(consumerDirectory, "consumer.ts"), consumerSource);
-	writeFileSync(
-		join(consumerDirectory, "tsconfig.json"),
-		JSON.stringify(
-			{
-				compilerOptions: {
-					strict: true,
-					noEmit: true,
-					target: "ES2022",
-					module: "ESNext",
-					moduleResolution: "Bundler",
-					moduleDetection: "force",
-					skipLibCheck: true,
-				},
-				include: ["consumer.ts"],
-			},
-			null,
-			2,
-		),
-	);
-	run(
-		process.execPath,
-		[
-			resolve(root, "node_modules/typescript/bin/tsc"),
-			"--project",
+		writeFileSync(join(consumerDirectory, "consumer.ts"), consumerSource);
+		writeFileSync(
 			join(consumerDirectory, "tsconfig.json"),
-		],
-		consumerDirectory,
-	);
-
-	const installedManifest = JSON.parse(
-		readFileSync(
-			join(consumerDirectory, "node_modules/trakoo/package.json"),
-			"utf8",
-		),
-	);
-	if (!installedManifest.dependencies?.["@standard-schema/spec"]) {
-		throw new Error("packed trakoo is missing @standard-schema/spec dependency");
-	}
-	const fontTypesManifest = JSON.parse(
-		readFileSync(
-			join(
-				consumerDirectory,
-				"node_modules/@types/css-font-loading-module/package.json",
+			JSON.stringify(
+				{
+					compilerOptions: {
+						strict: true,
+						noEmit: true,
+						target: "ES2022",
+						module: "ESNext",
+						moduleResolution: "Bundler",
+						moduleDetection: "force",
+						skipLibCheck: true,
+					},
+					include: ["consumer.ts"],
+				},
+				null,
+				2,
 			),
-			"utf8",
-		),
-	);
-	if (fontTypesManifest.version !== "0.0.13") {
-		throw new Error(
-			`packed consumer hoisted unexpected css font types ${fontTypesManifest.version}`,
 		);
-	}
+		run(
+			process.execPath,
+			[
+				resolve(root, "node_modules/typescript/bin/tsc"),
+				"--project",
+				join(consumerDirectory, "tsconfig.json"),
+			],
+			consumerDirectory,
+		);
 
-	const concreteValidators = ["zod", "valibot", "arktype"];
-	for (const field of [
-		"dependencies",
-		"optionalDependencies",
-		"peerDependencies",
-	]) {
-		for (const packageName of concreteValidators) {
-			if (installedManifest[field]?.[packageName]) {
-				throw new Error(
-					`packed trakoo declares concrete validator ${packageName}`,
-				);
+		const installedManifest = JSON.parse(
+			readFileSync(
+				join(consumerDirectory, "node_modules/trakoo/package.json"),
+				"utf8",
+			),
+		);
+		if (!installedManifest.dependencies?.["@standard-schema/spec"]) {
+			throw new Error(
+				"packed trakoo is missing @standard-schema/spec dependency",
+			);
+		}
+		const fontTypesManifest = JSON.parse(
+			readFileSync(
+				join(
+					consumerDirectory,
+					"node_modules/@types/css-font-loading-module/package.json",
+				),
+				"utf8",
+			),
+		);
+		if (fontTypesManifest.version !== "0.0.13") {
+			throw new Error(
+				`packed consumer hoisted unexpected css font types ${fontTypesManifest.version}`,
+			);
+		}
+
+		const concreteValidators = ["zod", "valibot", "arktype"];
+		for (const field of [
+			"dependencies",
+			"optionalDependencies",
+			"peerDependencies",
+		]) {
+			for (const packageName of concreteValidators) {
+				if (installedManifest[field]?.[packageName]) {
+					throw new Error(
+						`packed trakoo declares concrete validator ${packageName}`,
+					);
+				}
 			}
 		}
-	}
 
-	const installedDist = join(
-		consumerDirectory,
-		"node_modules/trakoo/dist",
-	);
-	assertRootBundleNeutral(join(installedDist, "index.js"), installedDist, [
-		...concreteValidators,
-		"posthog-js",
-		"posthog-node",
-		"@openpanel/sdk",
-		"@openpanel/web",
-		"@bentonow/bento-node-sdk",
-		"@emitkit/js",
-	]);
+		const installedDist = join(consumerDirectory, "node_modules/trakoo/dist");
+		assertRootBundleNeutral(join(installedDist, "index.js"), installedDist, [
+			...concreteValidators,
+			"posthog-js",
+			"posthog-node",
+			"@openpanel/sdk",
+			"@openpanel/web",
+			"@bentonow/bento-node-sdk",
+			"@emitkit/js",
+		]);
 
-	// Prove root event helpers load without optional provider packages present.
-	run("npm", ["prune", "--omit=optional"], consumerDirectory);
-	writeFileSync(
-		join(consumerDirectory, "consumer.ts"),
-		String.raw`
+		// Prove root event helpers load without optional provider packages present.
+		run("npm", ["prune", "--omit=optional"], consumerDirectory);
+		writeFileSync(
+			join(consumerDirectory, "consumer.ts"),
+			String.raw`
 import { defineEvents, typed } from "trakoo";
 
 defineEvents({
@@ -189,21 +185,21 @@ defineEvents({
 	},
 });
 `,
-	);
-	run(
-		process.execPath,
-		[
-			resolve(root, "node_modules/typescript/bin/tsc"),
-			"--project",
-			join(consumerDirectory, "tsconfig.json"),
-		],
-		consumerDirectory,
-	);
-	run(
-		process.execPath,
-		["--input-type=module", "--eval", 'await import("trakoo")'],
-		consumerDirectory,
-	);
+		);
+		run(
+			process.execPath,
+			[
+				resolve(root, "node_modules/typescript/bin/tsc"),
+				"--project",
+				join(consumerDirectory, "tsconfig.json"),
+			],
+			consumerDirectory,
+		);
+		run(
+			process.execPath,
+			["--input-type=module", "--eval", 'await import("trakoo")'],
+			consumerDirectory,
+		);
 	} finally {
 		if (tarballPath) rmSync(tarballPath, { force: true });
 		rmSync(consumerDirectory, { recursive: true, force: true });

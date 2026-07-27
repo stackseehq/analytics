@@ -1,9 +1,4 @@
-import {
-	mkdtempSync,
-	mkdirSync,
-	rmSync,
-	writeFileSync,
-} from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -18,10 +13,7 @@ describe("packed root bundle verification", () => {
 		try {
 			mkdirSync(join(distDirectory, "client"));
 			writeFileSync(join(distDirectory, "index.d.ts"), "export {};\n");
-			writeFileSync(
-				join(distDirectory, "client/index.d.ts"),
-				"export {};\n",
-			);
+			writeFileSync(join(distDirectory, "client/index.d.ts"), "export {};\n");
 
 			expect(() =>
 				assertDeclarationTargetsExist(distDirectory, [
@@ -36,9 +28,7 @@ describe("packed root bundle verification", () => {
 	});
 
 	it("scans only the complete root-reachable static import graph", () => {
-		const distDirectory = mkdtempSync(
-			join(tmpdir(), "trakoo-root-graph-"),
-		);
+		const distDirectory = mkdtempSync(join(tmpdir(), "trakoo-root-graph-"));
 		try {
 			mkdirSync(join(distDirectory, "chunks"));
 			writeFileSync(
@@ -53,10 +43,7 @@ describe("packed root bundle verification", () => {
 				join(distDirectory, "chunks/validation.js"),
 				'import "@bentonow/bento-node-sdk";',
 			);
-			writeFileSync(
-				join(distDirectory, "providers.js"),
-				'import "zod";',
-			);
+			writeFileSync(join(distDirectory, "providers.js"), 'import "zod";');
 
 			expect(() =>
 				assertRootBundleNeutral(
