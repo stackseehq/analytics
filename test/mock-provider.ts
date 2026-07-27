@@ -39,19 +39,19 @@ export class MockAnalyticsProvider extends BaseAnalyticsProvider {
 	identify(userId: string, traits?: Record<string, unknown>): void {
 		if (!this.isEnabled() || !this.initialized) return;
 		this.calls.identify.push({ userId, traits });
-		this.log("Identified user", { userId, traits });
+		this.log("Identified user");
 	}
 
 	track(event: BaseEvent, context?: EventContext): void {
 		if (!this.isEnabled() || !this.initialized) return;
 		this.calls.track.push({ event, context });
-		this.log("Tracked event", { event, context });
+		this.log("Tracked event");
 	}
 
 	pageView(properties?: Record<string, unknown>, context?: EventContext): void {
 		if (!this.isEnabled() || !this.initialized) return;
 		this.calls.pageView.push({ properties, context });
-		this.log("Tracked page view", { properties, context });
+		this.log("Tracked page view");
 	}
 
 	pageLeave(
@@ -60,7 +60,7 @@ export class MockAnalyticsProvider extends BaseAnalyticsProvider {
 	): void {
 		if (!this.isEnabled() || !this.initialized) return;
 		this.calls.pageLeave.push({ properties, context });
-		this.log("Tracked page leave", { properties, context });
+		this.log("Tracked page leave");
 	}
 
 	reset(): void {
@@ -72,7 +72,7 @@ export class MockAnalyticsProvider extends BaseAnalyticsProvider {
 	flush(useBeacon?: boolean): void {
 		if (!this.isEnabled() || !this.initialized) return;
 		this.calls.flush.push({ useBeacon });
-		this.log("Flushed", { useBeacon });
+		this.log("Flushed");
 	}
 
 	// Helper method to clear all calls

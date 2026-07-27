@@ -1,17 +1,21 @@
 import { describe, it, expect, vi } from "vitest";
 import { MockAnalyticsProvider } from "./mock-provider";
 
+class ExposedLogProvider extends MockAnalyticsProvider {
+	logOperation(): void {
+		this.log("Operation");
+	}
+}
+
 describe("BaseAnalyticsProvider", () => {
-	it("should respect debug flag", () => {
+	it("logs one operation string when debug is enabled", () => {
 		const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
 
-		const debugProvider = new MockAnalyticsProvider({ debug: true });
-		debugProvider.initialize();
+		const debugProvider = new ExposedLogProvider({ debug: true });
+		debugProvider.logOperation();
 
-		expect(consoleSpy).toHaveBeenCalledWith(
-			"[MockProvider] Initialized",
-			undefined,
-		);
+		expect(consoleSpy).toHaveBeenCalledWith("[MockProvider] Operation");
+		expect(consoleSpy.mock.calls[0]).toHaveLength(1);
 
 		consoleSpy.mockRestore();
 	});

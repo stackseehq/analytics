@@ -78,10 +78,12 @@ export class PirschClientProvider extends BaseAnalyticsProvider {
 			}
 			await this.waitForPirsch();
 			this.initialized = true;
-			this.log("Initialized successfully", this.config);
+			this.log("Initialized successfully");
 		} catch (error) {
 			this.initPromise = null;
-			console.error("[Pirsch-Client] Failed to initialize:", error);
+			console.error(
+				`[Pirsch-Client] Failed to initialize (${this.getErrorClass(error)})`,
+			);
 			throw error;
 		}
 	}
@@ -119,7 +121,9 @@ export class PirschClientProvider extends BaseAnalyticsProvider {
 			if (typeof window.pirsch === "function") return;
 			await new Promise((resolve) => setTimeout(resolve, interval));
 		}
-		throw new Error("Pirsch global function not available after loading script");
+		throw new Error(
+			"Pirsch global function not available after loading script",
+		);
 	}
 
 	identify(_userId: string, _traits?: Record<string, unknown>): void {
@@ -148,18 +152,26 @@ export class PirschClientProvider extends BaseAnalyticsProvider {
 				event.action,
 				Object.keys(meta).length > 0 ? { meta } : undefined,
 			);
-			this.log("Tracked event", { event, context });
+			this.log("Tracked event");
 		} catch (error) {
-			console.error("[Pirsch-Client] Failed to track event:", error);
+			console.error(
+				`[Pirsch-Client] Failed to track event (${this.getErrorClass(error)})`,
+			);
 		}
 	}
 
-	pageView(_properties?: Record<string, unknown>, _context?: EventContext): void {
+	pageView(
+		_properties?: Record<string, unknown>,
+		_context?: EventContext,
+	): void {
 		// Pirsch pa.js handles page views automatically on script load
 		this.log("Page view — handled automatically by Pirsch pa.js");
 	}
 
-	pageLeave(_properties?: Record<string, unknown>, _context?: EventContext): void {
+	pageLeave(
+		_properties?: Record<string, unknown>,
+		_context?: EventContext,
+	): void {
 		// Pirsch pa.js handles page leave automatically
 		this.log("Page leave — handled automatically by Pirsch pa.js");
 	}

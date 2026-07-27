@@ -47,7 +47,9 @@ export class OpenPanelServerProvider extends BaseAnalyticsProvider {
 			this.initialized = true;
 			this.log("Initialized successfully");
 		} catch (error) {
-			console.error("[OpenPanel-Server] Failed to initialize:", error);
+			console.error(
+				`[OpenPanel-Server] Failed to initialize (${this.getErrorClass(error)})`,
+			);
 			throw error;
 		}
 	}
@@ -67,7 +69,7 @@ export class OpenPanelServerProvider extends BaseAnalyticsProvider {
 			client.clear();
 		}
 		await pending;
-		this.log("Updated user profile", { userId, traits });
+		this.log("Updated user profile");
 	}
 
 	async track(event: BaseEvent, context?: EventContext): Promise<void> {
@@ -79,7 +81,7 @@ export class OpenPanelServerProvider extends BaseAnalyticsProvider {
 			event.action,
 			buildTrackedEventProperties(event, context),
 		);
-		this.log("Tracked event", { event, context });
+		this.log("Tracked event");
 	}
 
 	async pageView(
@@ -97,7 +99,7 @@ export class OpenPanelServerProvider extends BaseAnalyticsProvider {
 				userId: context?.user?.userId,
 			}),
 		);
-		this.log("Tracked page view", { properties, context });
+		this.log("Tracked page view");
 	}
 
 	pageLeave(

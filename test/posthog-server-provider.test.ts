@@ -169,4 +169,58 @@ describe("PostHogServerProvider", () => {
 			properties: { section: "home" },
 		});
 	});
+
+	it("keeps configuration, identity, properties, and context out of debug logs", () => {
+		const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+		const provider = new PostHogServerProvider({
+			apiKey: "DO_NOT_LOG_API_KEY",
+			host: "https://DO_NOT_LOG_ENDPOINT.example",
+			debug: true,
+		});
+
+		provider.initialize();
+		provider.identify("DO_NOT_LOG_USER_ID", {
+			email: "DO_NOT_LOG_EMAIL",
+		});
+		provider.track(
+			{
+				action: "safe_registry_event",
+				category: "engagement",
+				properties: { value: "DO_NOT_LOG_PROPERTY" },
+			},
+			{
+				page: { path: "/DO_NOT_LOG_CONTEXT" },
+				user: { email: "DO_NOT_LOG_CONTEXT_EMAIL" },
+			},
+		);
+		provider.pageView(
+			{ value: "DO_NOT_LOG_PAGE_PROPERTY" },
+			{ page: { path: "/DO_NOT_LOG_PAGE_CONTEXT" } },
+		);
+
+		const output = JSON.stringify(consoleSpy.mock.calls);
+		expect(output).toContain("[PostHog-Server] Initialized successfully");
+		expect(output).not.toContain("DO_NOT_LOG");
+		expect(consoleSpy.mock.calls.every((call) => call.length === 1)).toBe(true);
+		consoleSpy.mockRestore();
+	});
+
+	it("logs neither external error messages nor hostile error names", () => {
+		const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+		const externalError = new Error("DO_NOT_LOG_EXTERNAL_ERROR_MESSAGE");
+		externalError.name = "DO_NOT_LOG_HOSTILE_ERROR_NAME";
+		constructorSpy.mockImplementationOnce(() => {
+			throw externalError;
+		});
+		const provider = new PostHogServerProvider({
+			apiKey: "DO_NOT_LOG_API_KEY",
+		});
+
+		expect(() => provider.initialize()).toThrow(externalError);
+
+		const output = JSON.stringify(consoleSpy.mock.calls);
+		expect(output).not.toContain("DO_NOT_LOG");
+		expect(consoleSpy.mock.calls[0]).toHaveLength(1);
+		consoleSpy.mockRestore();
+	});
 });

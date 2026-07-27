@@ -46,6 +46,8 @@ export interface ProxyProviderConfig {
 	/**
 	 * Observe delivery failures from automatic size, timer, or page-lifecycle
 	 * flushes. Manual flush and shutdown failures are still rejected to callers.
+	 * Applications receive the original error and are responsible for logging it
+	 * according to their own data-classification policy.
 	 */
 	onDeliveryError?: (error: unknown) => void;
 }
@@ -90,7 +92,7 @@ export class ProxyProvider extends BaseAnalyticsProvider {
 
 	async initialize(): Promise<void> {
 		if (!this.isEnabled()) return;
-		this.log("Initialized successfully", { endpoint: this.config.endpoint });
+		this.log("Initialized successfully");
 	}
 
 	identify(userId: string, traits?: Record<string, unknown>): void {
@@ -102,7 +104,7 @@ export class ProxyProvider extends BaseAnalyticsProvider {
 			traits,
 		});
 
-		this.log("Queued identify event", { userId, traits });
+		this.log("Queued identify event");
 	}
 
 	async track(
@@ -127,7 +129,7 @@ export class ProxyProvider extends BaseAnalyticsProvider {
 			context: this.sanitizeClientContext(context),
 		});
 
-		this.log("Queued track event", { event, context });
+		this.log("Queued track event");
 	}
 
 	pageView(properties?: Record<string, unknown>, context?: EventContext): void {
@@ -140,7 +142,7 @@ export class ProxyProvider extends BaseAnalyticsProvider {
 			context: this.sanitizeClientContext(context),
 		});
 
-		this.log("Queued page view event", { properties, context });
+		this.log("Queued page view event");
 	}
 
 	async reset(): Promise<void> {
@@ -274,20 +276,9 @@ export class ProxyProvider extends BaseAnalyticsProvider {
 	}
 
 	private logSafeDeliveryError(error: unknown): void {
-		console.error("[Proxy] Automatic delivery failed", {
-			errorClass: this.getErrorClass(error),
-		});
-	}
-
-	private getErrorClass(error: unknown): string {
-		if (error instanceof TypeError) return "TypeError";
-		if (error instanceof RangeError) return "RangeError";
-		if (error instanceof ReferenceError) return "ReferenceError";
-		if (error instanceof SyntaxError) return "SyntaxError";
-		if (error instanceof URIError) return "URIError";
-		if (error instanceof EvalError) return "EvalError";
-		if (error instanceof Error) return "Error";
-		return "NonError";
+		console.error(
+			`[Proxy] Automatic delivery failed (${this.getErrorClass(error)})`,
+		);
 	}
 
 	private async sendEvents(
@@ -335,9 +326,9 @@ export class ProxyProvider extends BaseAnalyticsProvider {
 		} catch (error) {
 			if (attempt < this.retryAttempts) {
 				const delay = this.calculateRetryDelay(attempt);
-				this.log(`Retry attempt ${attempt + 1} after ${delay}ms`, {
-					errorClass: this.getErrorClass(error),
-				});
+				this.log(
+					`Retry attempt ${attempt + 1} after ${delay}ms (${this.getErrorClass(error)})`,
+				);
 
 				await new Promise((resolve) => setTimeout(resolve, delay));
 				return this.sendWithRetry(payload, attempt + 1, keepalive);

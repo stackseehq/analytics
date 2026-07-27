@@ -510,6 +510,40 @@ describe("Proxy Server Ingestion", () => {
 			},
 		);
 
+		it("keeps unknown input out of bounded console errors", async () => {
+			const consoleError = vi
+				.spyOn(console, "error")
+				.mockImplementation(() => {});
+			const strictAnalytics = createServerAnalytics({
+				events: proxyEvents,
+				providers: [mockProvider],
+				validation: { onFailure: "throw" },
+			});
+			await strictAnalytics.initialize();
+
+			await ingestProxyEvents(
+				requestFor(
+					payload([
+						{
+							type: "track",
+							name: "DO_NOT_LOG_UNKNOWN_EVENT",
+							inputProvided: true,
+							input: { value: "DO_NOT_LOG_UNKNOWN_INPUT" },
+							occurredAt: 1_725_000_000_000,
+						},
+					]),
+				),
+				strictAnalytics,
+			);
+
+			const output = JSON.stringify(consoleError.mock.calls);
+			expect(consoleError).toHaveBeenCalledTimes(1);
+			expect(consoleError.mock.calls[0]).toHaveLength(1);
+			expect(output).not.toContain("DO_NOT_LOG");
+			expectNoProviderDispatch(mockProvider);
+			consoleError.mockRestore();
+		});
+
 		it("distinguishes omitted propertyless input from explicit undefined", async () => {
 			const validationError = vi.fn();
 			const proxyError = vi.fn();
@@ -1103,6 +1137,33 @@ describe("Proxy Server Ingestion", () => {
 			} finally {
 				consoleError.mockRestore();
 			}
+		});
+
+		it("rethrows an original authorization failure whose prototype cannot be inspected", async () => {
+			const consoleError = vi
+				.spyOn(console, "error")
+				.mockImplementation(() => {});
+			const originalError = new Proxy(
+				{},
+				{
+					getPrototypeOf() {
+						throw new Error("DO_NOT_LOG_PROTOTYPE_TRAP");
+					},
+				},
+			);
+			const request = requestFor(payload([]));
+
+			await expect(
+				ingestProxyEvents(request, serverAnalytics, {
+					authorize: () => {
+						throw originalError;
+					},
+				}),
+			).rejects.toBe(originalError);
+			expect(JSON.stringify(consoleError.mock.calls)).not.toContain(
+				"DO_NOT_LOG",
+			);
+			consoleError.mockRestore();
 		});
 
 		it.each([0, -1, 1.5, Number.POSITIVE_INFINITY, Number.NaN])(

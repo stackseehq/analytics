@@ -38,9 +38,11 @@ export class PostHogServerProvider extends BaseAnalyticsProvider {
 			});
 
 			this.initialized = true;
-			this.log("Initialized successfully", this.config);
+			this.log("Initialized successfully");
 		} catch (error) {
-			console.error("[PostHog-Server] Failed to initialize:", error);
+			console.error(
+				`[PostHog-Server] Failed to initialize (${this.getErrorClass(error)})`,
+			);
 			throw error;
 		}
 	}
@@ -53,7 +55,7 @@ export class PostHogServerProvider extends BaseAnalyticsProvider {
 			properties: traits,
 		});
 
-		this.log("Identified user", { userId, traits });
+		this.log("Identified user");
 	}
 
 	track(event: BaseEvent, context?: EventContext): void {
@@ -82,7 +84,7 @@ export class PostHogServerProvider extends BaseAnalyticsProvider {
 			properties,
 		});
 
-		this.log("Tracked event", { event, context });
+		this.log("Tracked event");
 	}
 
 	pageView(properties?: Record<string, unknown>, context?: EventContext): void {
@@ -105,7 +107,7 @@ export class PostHogServerProvider extends BaseAnalyticsProvider {
 			properties: pageProperties,
 		});
 
-		this.log("Tracked page view", { properties, context });
+		this.log("Tracked page view");
 	}
 
 	async reset(): Promise<void> {

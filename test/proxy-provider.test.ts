@@ -555,10 +555,7 @@ describe("ProxyProvider", () => {
 			await vi.advanceTimersByTimeAsync(0);
 
 			expect(consoleError).toHaveBeenCalledTimes(1);
-			expect(consoleError).not.toHaveBeenCalledWith(
-				expect.anything(),
-				secretError,
-			);
+			expect(consoleError.mock.calls[0]).toHaveLength(1);
 			const logged = JSON.stringify(consoleError.mock.calls);
 			expect(logged).toContain("TypeError");
 			expect(logged).not.toContain("error-secret");
@@ -570,6 +567,41 @@ describe("ProxyProvider", () => {
 
 			fetchMock.mockResolvedValueOnce(successfulResponse);
 			await provider.flush();
+		});
+
+		it("keeps queued identity, event, page, and endpoint data out of debug logs", async () => {
+			const consoleLog = vi.spyOn(console, "log").mockImplementation(() => {});
+			provider = new ProxyProvider({
+				endpoint: "/api/events?DO_NOT_LOG_ENDPOINT",
+				debug: true,
+				batch: { size: 100, interval: 10_000 },
+			});
+
+			await provider.initialize();
+			provider.identify("DO_NOT_LOG_USER_ID", {
+				email: "DO_NOT_LOG_EMAIL",
+			});
+			await trackWithInvocation(
+				provider,
+				{
+					action: "safe_registry_event",
+					category: "test",
+					properties: { value: "DO_NOT_LOG_PROPERTY" },
+				},
+				{ page: { path: "/DO_NOT_LOG_CONTEXT" } },
+			);
+			provider.pageView(
+				{ value: "DO_NOT_LOG_PAGE_PROPERTY" },
+				{ page: { path: "/DO_NOT_LOG_PAGE_CONTEXT" } },
+			);
+
+			const output = JSON.stringify(consoleLog.mock.calls);
+			expect(output).toContain("[Proxy] Initialized successfully");
+			expect(output).not.toContain("DO_NOT_LOG");
+			expect(consoleLog.mock.calls.every((call) => call.length === 1)).toBe(
+				true,
+			);
+			consoleLog.mockRestore();
 		});
 
 		it("schedules one retry interval from a failed delivery without spinning", async () => {
@@ -1112,8 +1144,7 @@ describe("ProxyProvider", () => {
 			// Initial + 2 retries = 3 total attempts
 			expect(fetchMock).toHaveBeenCalledTimes(3);
 			expect(consoleError).toHaveBeenCalledWith(
-				"[Proxy] Automatic delivery failed",
-				{ errorClass: "Error" },
+				"[Proxy] Automatic delivery failed (Error)",
 			);
 
 			consoleError.mockRestore();

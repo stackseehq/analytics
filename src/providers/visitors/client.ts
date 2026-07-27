@@ -94,11 +94,13 @@ export class VisitorsClientProvider extends BaseAnalyticsProvider {
 
 			this.visitors = window.visitors;
 			this.initialized = true;
-			this.log("Initialized successfully", this.config);
+			this.log("Initialized successfully");
 		} catch (error) {
 			// Allow a future retry after transient failures (e.g. network error)
 			this.initPromise = null;
-			console.error("[Visitors-Client] Failed to initialize:", error);
+			console.error(
+				`[Visitors-Client] Failed to initialize (${this.getErrorClass(error)})`,
+			);
 			throw error;
 		}
 	}
@@ -154,7 +156,7 @@ export class VisitorsClientProvider extends BaseAnalyticsProvider {
 		// Without this, calling identify() on every route change (a common pattern
 		// in Next.js layouts) hammers e.visitors.now/e and triggers 429s.
 		if (this.lastIdentifiedUserId === userId) {
-			this.log("Identify skipped — already identified this session", { userId });
+			this.log("Identify skipped — already identified this session");
 			return;
 		}
 
@@ -175,7 +177,7 @@ export class VisitorsClientProvider extends BaseAnalyticsProvider {
 
 		this.visitors.identify(payload);
 		this.lastIdentifiedUserId = userId;
-		this.log("Identified user", { userId, traits });
+		this.log("Identified user");
 	}
 
 	track(event: BaseEvent, context?: EventContext): void {
@@ -204,23 +206,25 @@ export class VisitorsClientProvider extends BaseAnalyticsProvider {
 		}
 
 		this.visitors.track(event.action, properties);
-		this.log("Tracked event", { event, context });
+		this.log("Tracked event");
 	}
 
 	pageView(properties?: Record<string, unknown>, context?: EventContext): void {
 		// visitors.now tracks page views automatically via the script tag.
 		// No explicit call needed, but we can track a custom event if desired.
-		this.log("Page view - handled automatically by Visitors script", {
-			properties,
-			context,
-		});
+		this.log("Page view - handled automatically by Visitors script");
 	}
 
 	pageLeave(
 		properties?: Record<string, unknown>,
 		context?: EventContext,
 	): void {
-		if (!this.isEnabled() || !this.initialized || !this.visitors || !isBrowser())
+		if (
+			!this.isEnabled() ||
+			!this.initialized ||
+			!this.visitors ||
+			!isBrowser()
+		)
 			return;
 
 		const props: Record<string, string | number> = {};
@@ -238,15 +242,22 @@ export class VisitorsClientProvider extends BaseAnalyticsProvider {
 		}
 
 		this.visitors.track("page_leave", props);
-		this.log("Tracked page leave", { properties, context });
+		this.log("Tracked page leave");
 	}
 
 	reset(): void {
-		if (!this.isEnabled() || !this.initialized || !this.visitors || !isBrowser())
+		if (
+			!this.isEnabled() ||
+			!this.initialized ||
+			!this.visitors ||
+			!isBrowser()
+		)
 			return;
 
 		// visitors.now doesn't expose a native reset method
-		this.log("Reset user session - Note: Visitors does not have a native reset method");
+		this.log(
+			"Reset user session - Note: Visitors does not have a native reset method",
+		);
 	}
 
 	// ============================================================================

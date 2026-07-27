@@ -104,7 +104,8 @@ export interface IngestProxyEventsConfig<
 		| Promise<ProxyTrustedIdentity<TUserTraits> | undefined>;
 
 	/**
-	 * Error handler.
+	 * Error handler. Applications receive the original error and are responsible
+	 * for logging it according to their own data-classification policy.
 	 */
 	readonly onError?: (error: unknown) => void;
 }
@@ -492,16 +493,23 @@ function reportError<TUserTraits extends object>(
 		return;
 	}
 	if (logIfUnhandled) {
-		console.error(message, {
-			name: error instanceof Error ? error.name : "UnknownError",
-			...(isRecord(error) && typeof error.code === "string"
-				? { code: error.code }
-				: {}),
-			...(isRecord(error) && typeof error.status === "number"
-				? { status: error.status }
-				: {}),
-		});
+		console.error(`${message} (${getErrorClass(error)})`);
 	}
+}
+
+function getErrorClass(error: unknown): string {
+	try {
+		if (error instanceof TypeError) return "TypeError";
+		if (error instanceof RangeError) return "RangeError";
+		if (error instanceof ReferenceError) return "ReferenceError";
+		if (error instanceof SyntaxError) return "SyntaxError";
+		if (error instanceof URIError) return "URIError";
+		if (error instanceof EvalError) return "EvalError";
+		if (error instanceof Error) return "Error";
+	} catch {
+		// Error classification must never replace the original failure.
+	}
+	return "UnknownError";
 }
 
 /**
@@ -598,9 +606,19 @@ export async function ingestProxyEvents<
 			error,
 			config,
 			"[Proxy] Failed to ingest events:",
-			!(error instanceof ProxyIngestError || error instanceof ProxyTrustError),
+			!isExpectedProxyError(error),
 		);
 		throw error;
+	}
+}
+
+function isExpectedProxyError(error: unknown): boolean {
+	try {
+		return (
+			error instanceof ProxyIngestError || error instanceof ProxyTrustError
+		);
+	} catch {
+		return false;
 	}
 }
 
@@ -641,18 +659,23 @@ export function createProxyHandler<
 			await ingestProxyEvents(request, analytics, config);
 			return new Response("OK", { status: 200 });
 		} catch (error) {
-			if (error instanceof ProxyIngestError) {
-				return errorResponse(error.code, error.status);
-			}
-			if (
-				error instanceof ProxyTrustError &&
-				error.code === "invalid_payload"
-			) {
-				return errorResponse("invalid_payload", 400);
-			}
-			return errorResponse("internal_error", 500);
+			return proxyErrorResponse(error) ?? errorResponse("internal_error", 500);
 		}
 	};
+}
+
+function proxyErrorResponse(error: unknown): Response | undefined {
+	try {
+		if (error instanceof ProxyIngestError) {
+			return errorResponse(error.code, error.status);
+		}
+		if (error instanceof ProxyTrustError && error.code === "invalid_payload") {
+			return errorResponse("invalid_payload", 400);
+		}
+	} catch {
+		// Hostile thrown values must not escape the request handler.
+	}
+	return undefined;
 }
 
 function errorResponse(

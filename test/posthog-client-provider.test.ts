@@ -229,4 +229,78 @@ describe("PostHogClientProvider", () => {
 		expect(name).not.toBe("");
 		errorSpy.mockRestore();
 	});
+
+	it("keeps configuration, identity, properties, and context out of debug logs", async () => {
+		const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+		const provider = new PostHogClientProvider({
+			token: "DO_NOT_LOG_API_KEY",
+			api_host: "https://DO_NOT_LOG_ENDPOINT.example",
+			debug: true,
+		});
+
+		await provider.initialize();
+		provider.identify("DO_NOT_LOG_USER_ID", {
+			email: "DO_NOT_LOG_EMAIL",
+		});
+		provider.track(
+			{
+				action: "safe_registry_event",
+				category: "engagement",
+				properties: { value: "DO_NOT_LOG_PROPERTY" },
+			},
+			{
+				page: { path: "/DO_NOT_LOG_CONTEXT" },
+				user: { email: "DO_NOT_LOG_CONTEXT_EMAIL" },
+			},
+		);
+		provider.pageView(
+			{ value: "DO_NOT_LOG_PAGE_PROPERTY" },
+			{ page: { path: "/DO_NOT_LOG_PAGE_CONTEXT" } },
+		);
+
+		const output = JSON.stringify(consoleSpy.mock.calls);
+		expect(output).toContain("[PostHog-Client] Initialized successfully");
+		expect(output).not.toContain("DO_NOT_LOG");
+		expect(consoleSpy.mock.calls.every((call) => call.length === 1)).toBe(true);
+		consoleSpy.mockRestore();
+	});
+
+	it("logs neither external error messages nor hostile error names", async () => {
+		const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+		const externalError = new Error("DO_NOT_LOG_EXTERNAL_ERROR_MESSAGE");
+		externalError.name = "DO_NOT_LOG_HOSTILE_ERROR_NAME";
+		sdk.init.mockImplementationOnce(() => {
+			throw externalError;
+		});
+		const provider = new PostHogClientProvider({
+			token: "DO_NOT_LOG_API_KEY",
+		});
+
+		await expect(provider.initialize()).rejects.toBe(externalError);
+
+		const output = JSON.stringify(consoleSpy.mock.calls);
+		expect(output).not.toContain("DO_NOT_LOG");
+		expect(consoleSpy.mock.calls[0]).toHaveLength(1);
+		consoleSpy.mockRestore();
+	});
+
+	it("preserves an original thrown value whose prototype cannot be inspected", async () => {
+		const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+		const originalError = new Proxy(
+			{},
+			{
+				getPrototypeOf() {
+					throw new Error("DO_NOT_LOG_PROTOTYPE_TRAP");
+				},
+			},
+		);
+		sdk.init.mockImplementationOnce(() => {
+			throw originalError;
+		});
+		const provider = new PostHogClientProvider({ token: "project-key" });
+
+		await expect(provider.initialize()).rejects.toBe(originalError);
+		expect(JSON.stringify(consoleSpy.mock.calls)).not.toContain("DO_NOT_LOG");
+		consoleSpy.mockRestore();
+	});
 });

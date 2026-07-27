@@ -105,8 +105,7 @@ export class EmitKitServerProvider extends BaseAnalyticsProvider {
 			this.log("Initialized successfully");
 		} catch (error) {
 			console.error(
-				"[EmitKit-Server] Failed to initialize. Make sure @emitkit/js is installed:",
-				error,
+				`[EmitKit-Server] Failed to initialize (${this.getErrorClass(error)})`,
 			);
 			throw error;
 		}
@@ -146,25 +145,20 @@ export class EmitKitServerProvider extends BaseAnalyticsProvider {
 				aliases: aliases.length > 0 ? aliases : undefined,
 			});
 
-			this.log("Identified user", {
-				userId,
-				email,
-				identityId: result.data.id,
-				aliasesCreated: result.data.aliases?.created?.length || 0,
-				aliasesFailed: result.data.aliases?.failed?.length || 0,
-			});
+			this.log("Identified user");
 
 			if (
 				result.data.aliases?.failed &&
 				result.data.aliases.failed.length > 0
 			) {
 				console.warn(
-					"[EmitKit-Server] Some aliases failed to create:",
-					result.data.aliases.failed,
+					`[EmitKit-Server] ${result.data.aliases.failed.length} aliases failed to create`,
 				);
 			}
 		} catch (error) {
-			console.error("[EmitKit-Server] Failed to identify user:", error);
+			console.error(
+				`[EmitKit-Server] Failed to identify user (${this.getErrorClass(error)})`,
+			);
 		}
 	}
 
@@ -222,7 +216,7 @@ export class EmitKitServerProvider extends BaseAnalyticsProvider {
 		const channelName = this.resolveChannelName(event);
 
 		try {
-			const result = await this.client.events.create({
+			await this.client.events.create({
 				channelName,
 				title,
 				description: this.getEventDescription(event, context),
@@ -235,14 +229,11 @@ export class EmitKitServerProvider extends BaseAnalyticsProvider {
 				source: "stacksee-analytics",
 			});
 
-			this.log("Tracked event", {
-				eventId: result.data.id,
-				action: event.action,
-				userId,
-				channelName,
-			});
+			this.log("Tracked event");
 		} catch (error) {
-			console.error("[EmitKit-Server] Failed to track event:", error);
+			console.error(
+				`[EmitKit-Server] Failed to track event (${this.getErrorClass(error)})`,
+			);
 			throw error;
 		}
 	}
@@ -291,7 +282,7 @@ export class EmitKitServerProvider extends BaseAnalyticsProvider {
 		const channelName = this.resolveChannelName(syntheticEvent);
 
 		try {
-			const result = await this.client.events.create({
+			await this.client.events.create({
 				channelName,
 				title: "Page View",
 				description: context?.page?.path || "User viewed a page",
@@ -304,14 +295,11 @@ export class EmitKitServerProvider extends BaseAnalyticsProvider {
 				source: "stacksee-analytics",
 			});
 
-			this.log("Tracked page view", {
-				eventId: result.data.id,
-				path: context?.page?.path,
-				userId,
-				channelName,
-			});
+			this.log("Tracked page view");
 		} catch (error) {
-			console.error("[EmitKit-Server] Failed to track page view:", error);
+			console.error(
+				`[EmitKit-Server] Failed to track page view (${this.getErrorClass(error)})`,
+			);
 		}
 	}
 

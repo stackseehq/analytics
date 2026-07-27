@@ -102,7 +102,9 @@ export class OpenPanelClientProvider extends BaseAnalyticsProvider {
 		} catch (error) {
 			this.initPromise = undefined;
 			this.pendingActions = [];
-			console.error("[OpenPanel-Client] Failed to initialize:", error);
+			console.error(
+				`[OpenPanel-Client] Failed to initialize (${this.getErrorClass(error)})`,
+			);
 			throw error;
 		}
 	}
@@ -125,7 +127,9 @@ export class OpenPanelClientProvider extends BaseAnalyticsProvider {
 			try {
 				action();
 			} catch (error) {
-				console.error("[OpenPanel-Client] Pending action failed:", error);
+				console.error(
+					`[OpenPanel-Client] Pending action failed (${this.getErrorClass(error)})`,
+				);
 			}
 		}
 	}
@@ -137,10 +141,12 @@ export class OpenPanelClientProvider extends BaseAnalyticsProvider {
 			);
 			if (pending) {
 				void pending.catch((error) => {
-					console.error("[OpenPanel-Client] Failed to identify user:", error);
+					console.error(
+						`[OpenPanel-Client] Failed to identify user (${this.getErrorClass(error)})`,
+					);
 				});
 			}
-			this.log("Identified user", { userId, traits });
+			this.log("Identified user");
 		});
 	}
 
@@ -153,7 +159,7 @@ export class OpenPanelClientProvider extends BaseAnalyticsProvider {
 			event.action,
 			buildTrackedEventProperties(event, context),
 		);
-		this.log("Tracked event", { event, context });
+		this.log("Tracked event");
 	}
 
 	pageView(properties?: Record<string, unknown>, context?: EventContext): void {
@@ -165,7 +171,7 @@ export class OpenPanelClientProvider extends BaseAnalyticsProvider {
 			} else {
 				this.client?.screenView(pageProperties);
 			}
-			this.log("Tracked page view", { properties, context });
+			this.log("Tracked page view");
 		});
 	}
 

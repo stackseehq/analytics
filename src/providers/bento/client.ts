@@ -87,9 +87,11 @@ export class BentoClientProvider extends BaseAnalyticsProvider {
 			this.bento = window.bento;
 			this.initialized = true;
 
-			this.log("Initialized successfully", this.config);
+			this.log("Initialized successfully");
 		} catch (error) {
-			console.error("[Bento-Client] Failed to initialize:", error);
+			console.error(
+				`[Bento-Client] Failed to initialize (${this.getErrorClass(error)})`,
+			);
 			throw error;
 		}
 	}
@@ -151,7 +153,7 @@ export class BentoClientProvider extends BaseAnalyticsProvider {
 			}
 		}
 
-		this.log("Identified user", { userId, email, traits });
+		this.log("Identified user");
 	}
 
 	track(event: BaseEvent, context?: EventContext): void {
@@ -183,7 +185,7 @@ export class BentoClientProvider extends BaseAnalyticsProvider {
 		};
 
 		this.bento.track(event.action, data);
-		this.log("Tracked event", { event, context });
+		this.log("Tracked event");
 	}
 
 	pageView(properties?: Record<string, unknown>, context?: EventContext): void {
@@ -215,7 +217,7 @@ export class BentoClientProvider extends BaseAnalyticsProvider {
 			this.bento.track("$view", data);
 		}
 
-		this.log("Tracked page view", { properties, context });
+		this.log("Tracked page view");
 	}
 
 	pageLeave(
@@ -243,7 +245,7 @@ export class BentoClientProvider extends BaseAnalyticsProvider {
 		};
 
 		this.bento.track("$pageleave", data);
-		this.log("Tracked page leave", { properties, context });
+		this.log("Tracked page leave");
 	}
 
 	reset(): void {
@@ -275,7 +277,7 @@ export class BentoClientProvider extends BaseAnalyticsProvider {
 			return;
 
 		this.bento.tag(tag);
-		this.log("Added tag to user", { tag });
+		this.log("Added tag to user");
 	}
 
 	/**
@@ -287,7 +289,7 @@ export class BentoClientProvider extends BaseAnalyticsProvider {
 	 * ```typescript
 	 * const email = bentoProvider.getEmail();
 	 * if (email) {
-	 *   console.log('Current user:', email);
+	 *   console.log('A current user is available');
 	 * }
 	 * ```
 	 */
@@ -307,7 +309,7 @@ export class BentoClientProvider extends BaseAnalyticsProvider {
 	 * ```typescript
 	 * const name = bentoProvider.getName();
 	 * if (name) {
-	 *   console.log('Welcome back,', name);
+	 *   console.log('A current user name is available');
 	 * }
 	 * ```
 	 */
@@ -346,7 +348,7 @@ export class BentoClientProvider extends BaseAnalyticsProvider {
 			return;
 
 		this.bento.showSurveyForm(element, surveyId, type);
-		this.log("Showed survey form", { surveyId, type });
+		this.log("Showed survey form");
 	}
 
 	/**
@@ -369,10 +371,12 @@ export class BentoClientProvider extends BaseAnalyticsProvider {
 
 		try {
 			const result = await this.bento.spamCheck(email);
-			this.log("Spam check completed", { email, result });
+			this.log("Spam check completed");
 			return result;
 		} catch (error) {
-			console.error("[Bento-Client] Spam check failed:", error);
+			console.error(
+				`[Bento-Client] Spam check failed (${this.getErrorClass(error)})`,
+			);
 			return false;
 		}
 	}

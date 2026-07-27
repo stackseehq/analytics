@@ -40,10 +40,25 @@ export abstract class BaseAnalyticsProvider implements AnalyticsProvider {
 
 	abstract reset(): Promise<void> | void;
 
-	protected log(message: string, data?: unknown): void {
+	protected log(message: string): void {
 		if (this.debug) {
-			console.log(`[${this.name}] ${message}`, data);
+			console.log(`[${this.name}] ${message}`);
 		}
+	}
+
+	protected getErrorClass(error: unknown): string {
+		try {
+			if (error instanceof TypeError) return "TypeError";
+			if (error instanceof RangeError) return "RangeError";
+			if (error instanceof ReferenceError) return "ReferenceError";
+			if (error instanceof SyntaxError) return "SyntaxError";
+			if (error instanceof URIError) return "URIError";
+			if (error instanceof EvalError) return "EvalError";
+			if (error instanceof Error) return "Error";
+		} catch {
+			// Error classification must never replace the original failure.
+		}
+		return "UnknownError";
 	}
 
 	protected isEnabled(): boolean {

@@ -39,7 +39,9 @@ export class PostHogClientProvider extends BaseAnalyticsProvider {
 
 		this.initializePromise = this.initializePostHog().catch((error) => {
 			this.initializePromise = undefined;
-			console.error("[PostHog-Client] Failed to initialize:", error);
+			console.error(
+				`[PostHog-Client] Failed to initialize (${this.getErrorClass(error)})`,
+			);
 			throw error;
 		});
 		return this.initializePromise;
@@ -72,14 +74,14 @@ export class PostHogClientProvider extends BaseAnalyticsProvider {
 		);
 		this.initialized = true;
 
-		this.log("Initialized successfully", this.config);
+		this.log("Initialized successfully");
 	}
 
 	identify(userId: string, traits?: Record<string, unknown>): void {
 		if (!this.isEnabled() || !this.initialized || !this.posthog) return;
 
 		this.posthog.identify(userId, traits);
-		this.log("Identified user", { userId, traits });
+		this.log("Identified user");
 	}
 
 	track(event: BaseEvent, context?: EventContext): void {
@@ -100,7 +102,7 @@ export class PostHogClientProvider extends BaseAnalyticsProvider {
 		};
 
 		this.posthog.capture(event.action, properties);
-		this.log("Tracked event", { event, context });
+		this.log("Tracked event");
 	}
 
 	pageView(properties?: Record<string, unknown>, context?: EventContext): void {
@@ -117,7 +119,7 @@ export class PostHogClientProvider extends BaseAnalyticsProvider {
 		} satisfies Properties;
 
 		this.posthog.capture("$pageview", pageProperties);
-		this.log("Tracked page view", { properties, context });
+		this.log("Tracked page view");
 	}
 
 	pageLeave(
@@ -137,7 +139,7 @@ export class PostHogClientProvider extends BaseAnalyticsProvider {
 		} satisfies Properties;
 
 		this.posthog.capture("$pageleave", pageLeaveProperties);
-		this.log("Tracked page leave", { properties, context });
+		this.log("Tracked page leave");
 	}
 
 	reset(): void {

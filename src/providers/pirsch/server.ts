@@ -123,10 +123,7 @@ export class PirschServerProvider extends BaseAnalyticsProvider {
 		}
 
 		this.initialized = true;
-		this.log("Initialized successfully", {
-			hostname: this.config.hostname,
-			authMode: this.isAccessKey ? "access-key" : "oauth",
-		});
+		this.log("Initialized successfully");
 	}
 
 	/**
@@ -186,17 +183,21 @@ export class PirschServerProvider extends BaseAnalyticsProvider {
 
 			if (!response.ok) {
 				const error = await response.text();
-				throw new Error(`Failed to get Pirsch token: ${response.status} ${error}`);
+				throw new Error(
+					`Failed to get Pirsch token: ${response.status} ${error}`,
+				);
 			}
 
 			const data = await response.json();
 			this.accessToken = data.access_token;
 			this.tokenExpiresAt = new Date(data.expires_at);
 
-			this.log("OAuth token refreshed", { expiresAt: data.expires_at });
+			this.log("OAuth token refreshed");
 			return this.accessToken;
 		} catch (error) {
-			console.error("[Pirsch-Server] Failed to refresh token:", error);
+			console.error(
+				`[Pirsch-Server] Failed to refresh token (${this.getErrorClass(error)})`,
+			);
 			throw error;
 		}
 	}
@@ -267,8 +268,7 @@ export class PirschServerProvider extends BaseAnalyticsProvider {
 		return Object.fromEntries(
 			Object.entries(obj)
 				.filter(
-					([, v]) =>
-						v !== null && v !== undefined && typeof v !== "object",
+					([, v]) => v !== null && v !== undefined && typeof v !== "object",
 				)
 				.map(([k, v]) => [k, String(v)]),
 		);
@@ -328,7 +328,10 @@ export class PirschServerProvider extends BaseAnalyticsProvider {
 		};
 	}
 
-	async identify(userId: string, traits?: Record<string, unknown>): Promise<void> {
+	async identify(
+		userId: string,
+		traits?: Record<string, unknown>,
+	): Promise<void> {
 		if (!this.isEnabled() || !this.initialized) return;
 
 		// Pirsch doesn't have a native identify method
@@ -357,9 +360,11 @@ export class PirschServerProvider extends BaseAnalyticsProvider {
 
 		try {
 			await this.request("/api/v1/event", event);
-			this.log("Identified user via event", { userId, traits });
+			this.log("Identified user via event");
 		} catch (error) {
-			console.error("[Pirsch-Server] Failed to track identify event:", error);
+			console.error(
+				`[Pirsch-Server] Failed to track identify event (${this.getErrorClass(error)})`,
+			);
 		}
 	}
 
@@ -368,9 +373,7 @@ export class PirschServerProvider extends BaseAnalyticsProvider {
 
 		const hit = this.buildHit(context);
 		if (!hit) {
-			this.log("Skipping event - missing required IP or user-agent", {
-				event: event.action,
-			});
+			this.log("Skipping event - missing required IP or user-agent");
 			return;
 		}
 
@@ -399,13 +402,18 @@ export class PirschServerProvider extends BaseAnalyticsProvider {
 
 		try {
 			await this.request("/api/v1/event", pirschEvent);
-			this.log("Tracked event", { event: event.action });
+			this.log("Tracked event");
 		} catch (error) {
-			console.error("[Pirsch-Server] Failed to track event:", error);
+			console.error(
+				`[Pirsch-Server] Failed to track event (${this.getErrorClass(error)})`,
+			);
 		}
 	}
 
-	async pageView(properties?: Record<string, unknown>, context?: EventContext): Promise<void> {
+	async pageView(
+		properties?: Record<string, unknown>,
+		context?: EventContext,
+	): Promise<void> {
 		if (!this.isEnabled() || !this.initialized) return;
 
 		const hit = this.buildHit(context);
@@ -421,9 +429,11 @@ export class PirschServerProvider extends BaseAnalyticsProvider {
 
 		try {
 			await this.request("/api/v1/hit", hit);
-			this.log("Tracked page view", { path: context?.page?.path });
+			this.log("Tracked page view");
 		} catch (error) {
-			console.error("[Pirsch-Server] Failed to track page view:", error);
+			console.error(
+				`[Pirsch-Server] Failed to track page view (${this.getErrorClass(error)})`,
+			);
 		}
 	}
 
@@ -448,7 +458,9 @@ export class PirschServerProvider extends BaseAnalyticsProvider {
 		};
 
 		await this.request("/api/v1/event", event).catch((error) => {
-			console.error("[Pirsch-Server] Failed to track session reset:", error);
+			console.error(
+				`[Pirsch-Server] Failed to track session reset (${this.getErrorClass(error)})`,
+			);
 		});
 
 		this.log("Reset user session");

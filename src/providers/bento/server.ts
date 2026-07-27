@@ -89,13 +89,10 @@ export class BentoServerProvider extends BaseAnalyticsProvider {
 			this.client = new Analytics(bentoConfig);
 
 			this.initialized = true;
-			this.log("Initialized successfully", {
-				siteUuid: this.config.siteUuid,
-			});
+			this.log("Initialized successfully");
 		} catch (error) {
 			console.error(
-				"[Bento-Server] Failed to initialize. Make sure @bentonow/bento-node-sdk is installed:",
-				error,
+				`[Bento-Server] Failed to initialize (${this.getErrorClass(error)})`,
 			);
 			throw error;
 		}
@@ -112,10 +109,7 @@ export class BentoServerProvider extends BaseAnalyticsProvider {
 
 		// Validate that we have a proper email format
 		if (!email || !email.includes("@")) {
-			this.log("Skipping identify - invalid or missing email", {
-				userId,
-				traits,
-			});
+			this.log("Skipping identify - invalid or missing email");
 			return;
 		}
 
@@ -125,9 +119,11 @@ export class BentoServerProvider extends BaseAnalyticsProvider {
 
 		try {
 			await this.client.V1.addSubscriber({ email, fields });
-			this.log("Identified user", { userId, email, traits });
+			this.log("Identified user");
 		} catch (error) {
-			console.error("[Bento-Server] Failed to identify user:", error);
+			console.error(
+				`[Bento-Server] Failed to identify user (${this.getErrorClass(error)})`,
+			);
 		}
 	}
 
@@ -186,9 +182,11 @@ export class BentoServerProvider extends BaseAnalyticsProvider {
 				fields,
 			});
 
-			this.log("Tracked event", { event, context });
+			this.log("Tracked event");
 		} catch (error) {
-			console.error("[Bento-Server] Failed to track event:", error);
+			console.error(
+				`[Bento-Server] Failed to track event (${this.getErrorClass(error)})`,
+			);
 		}
 	}
 
@@ -237,9 +235,11 @@ export class BentoServerProvider extends BaseAnalyticsProvider {
 
 		try {
 			await this.client.V1.track({ email, type: "$view", details, fields });
-			this.log("Tracked page view", { properties, context });
+			this.log("Tracked page view");
 		} catch (error) {
-			console.error("[Bento-Server] Failed to track page view:", error);
+			console.error(
+				`[Bento-Server] Failed to track page view (${this.getErrorClass(error)})`,
+			);
 		}
 	}
 
