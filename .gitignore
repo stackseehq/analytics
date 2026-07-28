@@ -6,3 +6,6 @@ coverage
 .worktrees/
 .superpowers/
 *.log
+.env
+.env.*
+!.env.example

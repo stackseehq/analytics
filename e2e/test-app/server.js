@@ -59,12 +59,17 @@ globalThis.fetch = async (url, options) => {
 };
 
 // Set up Pirsch server analytics
+const requireEnvironmentVariable = (name) => {
+  const value = process.env[name];
+  if (!value) throw new Error(`Missing required environment variable: ${name}`);
+  return value;
+};
+
 const pirschProvider = new PirschServerProvider({
   hostname: "test.stacksee.com",
-  clientId: process.env.PIRSCH_CLIENT_ID || "cOpxstLX4vBg4BNkHGJPCMXC8mcxH6lH",
+  clientId: requireEnvironmentVariable("PIRSCH_CLIENT_ID"),
   clientSecret:
-    process.env.PIRSCH_CLIENT_SECRET ||
-    "3BUsxDKJrv0MmQvVCFoCIh9QCBdEKmtPvaXCnWCc2NjUsCI1kRvfM2f1Kq5YdRmK",
+    requireEnvironmentVariable("PIRSCH_CLIENT_SECRET"),
   timeout: 15000, // Increased from default 10s to avoid Vercel-style timeouts
   debug: true,
   disableBotFilter: true, // Allow test traffic through

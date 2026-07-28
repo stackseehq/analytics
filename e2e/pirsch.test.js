@@ -10,6 +10,10 @@
  * Requires the test server to be running:
  *   cd e2e/test-app && node server.js
  *
+ * The test server requires PIRSCH_CLIENT_ID and PIRSCH_CLIENT_SECRET in its
+ * process environment. Store populated values only in an approved local or CI
+ * secret store; do not commit them.
+ *
  * The test server intercepts outbound fetch calls to api.pirsch.io and exposes
  * them via GET /api/analytics/status for assertion.
  */
