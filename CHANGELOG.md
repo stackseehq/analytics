@@ -1,5 +1,55 @@
 # trakoo
 
+## 1.0.0
+
+### Major Changes
+
+- Publish provider SDKs as optional peer dependencies and load them only when ([`107774a`](https://github.com/multiplehats/trakoo/commit/107774af29a0b7de2d7a6ed7aa6bfa1db3c0cb6b))
+  their provider initializes. Trakoo no longer auto-installs or bundles unused
+  PostHog, OpenPanel, Bento, or EmitKit SDKs.
+
+- Replace the proxy wire format with version 2. Proxy track events now carry raw ([`1fceb0b`](https://github.com/multiplehats/trakoo/commit/1fceb0b9ef13f30bfd971b0b432a70aa8b461055))
+  registry input for server-side validation, and server identity must be derived
+  with `resolveIdentity` instead of trusting browser claims.
+
+- Replace type-asserted event collections with runtime `defineEvents()` registries based on Standard Schema. Add direct validator interoperability, validator-free `typed<T>()` events, propertyless events, inferred client/server factories, normalized validation failures, and validated provider outputs. Server `track()` calls now fail closed with the new `invalid_options` code when the options argument contains an unrecognized key, and Proxy replay no longer re-runs Standard Schema validators against already-validated client output. This removes the legacy event helper types and client singleton convenience API; see the [Standard Schema migration guide](https://trakoo.co/docs/guides/standard-schema-migration). ([#32](https://github.com/multiplehats/trakoo/pull/32))
+
+### Minor Changes
+
+- Add bounded proxy request parsing, batch limits, authorization and admission ([`8090859`](https://github.com/multiplehats/trakoo/commit/80908592dda143411a13ffbe929158c2b5245b32))
+  hooks, and typed HTTP errors for malformed or rejected analytics requests.
+
+### Patch Changes
+
+- Initialize each PostHog browser provider with its own named SDK object, ([`133e341`](https://github.com/multiplehats/trakoo/commit/133e341cbf2cce7426cb53a2aeeef81f905386ee))
+  isolating live configuration and identify, capture, and reset method dispatch
+  while preserving PostHog's token- and `persistence_name`-based storage
+  semantics.
+
+- Attribute PostHog server page views to user identity supplied on the current ([`a5b579b`](https://github.com/multiplehats/trakoo/commit/a5b579b5554755fa6fe59c82d311d3c487123689))
+  call instead of always recording them as anonymous.
+
+- Retain proxy events until transport acceptance, serialize concurrent flushes, ([`e4e4a96`](https://github.com/multiplehats/trakoo/commit/e4e4a96f8086ba6d27a259c3f9359e1a0b48cb0f))
+  bound batch latency from the first event, and await in-flight delivery during
+  shutdown.
+
+- Wait for asynchronous provider initialization before dispatching first-use ([`9504d75`](https://github.com/multiplehats/trakoo/commit/9504d759208e5a83f8ef302937b4caae1916a166))
+  client and server analytics operations, and allow initialization retry after a
+  transient failure.
+
+- Treat regex metacharacters literally in provider event patterns while ([`5d4af5c`](https://github.com/multiplehats/trakoo/commit/5d4af5c7811080324b8a24c380bc742bc827cc72))
+  preserving `*` as the only routing wildcard.
+
+- Stop provider debug logs from serializing configuration, identity, event ([`b1d124a`](https://github.com/multiplehats/trakoo/commit/b1d124af539ecc96d08ce4c6581061549b402dc3))
+  properties, context, and external SDK error objects.
+
+- Snapshot browser identity, session, context, and timestamp when `track()` is ([`19f1819`](https://github.com/multiplehats/trakoo/commit/19f18197b41a5249a56ee2349977c915747fffc8))
+  called so asynchronous initialization or validation cannot reattribute an event.
+
+- Prevent Bento and EmitKit server providers from retaining one request's user ([`6772c8f`](https://github.com/multiplehats/trakoo/commit/6772c8f0c09e1e69277b2599aa7ef4e97db52965))
+  identity for later events. Server events now use only identity supplied on the
+  current call.
+
 ## 0.1.0
 
 ### Minor Changes
