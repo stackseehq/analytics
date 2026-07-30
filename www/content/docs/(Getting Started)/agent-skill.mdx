@@ -55,6 +55,16 @@ npx skills add multiplehats/trakoo --skill trakoo --global
 Install per project when your team should share the same trakoo conventions through version control. Install globally when you want the skill available in every repository you touch, including ones that don't use trakoo yet.
 :::
 
+## Use without installing
+
+If you don't want to install the skill, give this prompt to your coding agent:
+
+```text
+Run `npx skills use "https://github.com/multiplehats/trakoo" --skill "trakoo"` and follow the generated skill instructions now. Read its complete output, redirecting it to a temporary file first if necessary. Resolve relative paths from the supporting-files directory it provides.
+```
+
+The `skills use` command loads the skill for the current task without adding it to your project or global skill directory.
+
 ## Manage the skill
 
 ```bash
