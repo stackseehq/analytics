@@ -263,7 +263,7 @@ describe("ProxyProvider", () => {
 
 	describe("Batching - Time Interval", () => {
 		it("should auto-flush after interval", async () => {
-			vi.useFakeTimers();
+			vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
 
 			provider = new ProxyProvider({
 				endpoint: "/api/events",
@@ -489,7 +489,7 @@ describe("ProxyProvider", () => {
 		});
 
 		it("reports one size-triggered failure while one shared delivery is in flight", async () => {
-			vi.useFakeTimers();
+			vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
 			const request = deferred<typeof successfulResponse>();
 			const onDeliveryError = vi.fn();
 			fetchMock.mockReturnValueOnce(request.promise);
@@ -533,7 +533,7 @@ describe("ProxyProvider", () => {
 		});
 
 		it("logs only fixed error-class metadata for an automatic failure without a callback", async () => {
-			vi.useFakeTimers();
+			vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
 			const consoleError = vi
 				.spyOn(console, "error")
 				.mockImplementation(() => {});
@@ -605,7 +605,7 @@ describe("ProxyProvider", () => {
 		});
 
 		it("schedules one retry interval from a failed delivery without spinning", async () => {
-			vi.useFakeTimers();
+			vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
 			const firstRequest = deferred<typeof successfulResponse>();
 			fetchMock
 				.mockReturnValueOnce(firstRequest.promise)
@@ -636,7 +636,7 @@ describe("ProxyProvider", () => {
 		});
 
 		it("starts the batch interval at the first queued event", async () => {
-			vi.useFakeTimers();
+			vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
 			provider = new ProxyProvider({
 				endpoint: "/api/events",
 				batch: { size: 100, interval: 2000 },
@@ -668,7 +668,7 @@ describe("ProxyProvider", () => {
 		});
 
 		it("starts a new timer for an event appended during a successful in-flight flush", async () => {
-			vi.useFakeTimers();
+			vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
 			const firstRequest = deferred<typeof successfulResponse>();
 			fetchMock
 				.mockReturnValueOnce(firstRequest.promise)
@@ -786,7 +786,7 @@ describe("ProxyProvider", () => {
 		});
 
 		it("observes a rejected page-lifecycle delivery without an unhandled promise", async () => {
-			vi.useFakeTimers();
+			vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
 			vi.spyOn(navigator, "sendBeacon").mockReturnValue(false);
 			const failure = new Error("lifecycle offline");
 			const onDeliveryError = vi.fn();
@@ -1032,7 +1032,7 @@ describe("ProxyProvider", () => {
 
 	describe("Retry Logic", () => {
 		it("should retry on failure with exponential backoff", async () => {
-			vi.useFakeTimers();
+			vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
 
 			// Fail twice, then succeed
 			fetchMock
@@ -1077,7 +1077,7 @@ describe("ProxyProvider", () => {
 		});
 
 		it("should use linear backoff when configured", async () => {
-			vi.useFakeTimers();
+			vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
 
 			fetchMock
 				.mockRejectedValueOnce(new Error("Network error"))
@@ -1115,7 +1115,7 @@ describe("ProxyProvider", () => {
 		});
 
 		it("should give up after max retries", async () => {
-			vi.useFakeTimers();
+			vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
 			const consoleError = vi
 				.spyOn(console, "error")
 				.mockImplementation(() => {});
