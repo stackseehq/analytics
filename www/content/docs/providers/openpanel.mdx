@@ -168,6 +168,10 @@ Client options:
       default: 'false',
       description: 'Enable provider and SDK debug logging.'
     },
+    onDeliveryFailure: {
+      type: 'function',
+      description: 'Called when OpenPanel rejects an event. Logged when omitted.'
+    },
     enabled: {
       type: 'boolean',
       default: 'true',
@@ -203,6 +207,10 @@ Server options:
       default: 'false',
       description: 'Enable provider and SDK debug logging.'
     },
+    onDeliveryFailure: {
+      type: 'function',
+      description: 'Called when OpenPanel rejects an event. Logged when omitted.'
+    },
     enabled: {
       type: 'boolean',
       default: 'true',
@@ -210,6 +218,31 @@ Server options:
     }
   }}
 />
+
+## Delivery failures
+
+OpenPanel's SDKs answer an HTTP 401 by dropping the event: they do not throw, retry, or log. A wrong client ID, a rotated secret, or a browser origin the project does not allow therefore stops analytics without producing a single error. Both providers report those rejections.
+
+```typescript title="lib/server-analytics.ts"
+new OpenPanelServerProvider({
+  clientId: process.env.OPENPANEL_CLIENT_ID!,
+  clientSecret: process.env.OPENPANEL_CLIENT_SECRET!,
+  onDeliveryFailure: (failure) => {
+    logger.warn('openpanel_delivery_failed', {
+      attempts: failure.attempts,
+      payloadType: failure.payloadType,
+      reason: failure.reason,
+      status: failure.status
+    });
+  }
+});
+```
+
+`reason` is `unauthorized` for a rejected key or origin, `server_error` for a response that was still rejected once the SDK's retries were exhausted, and `network_error` when the request never produced a response. The failure carries the OpenPanel envelope type and the ingestion URL, never the event properties.
+
+Without a handler the failure is reported with `console.error`, so a rejected key is visible by default. Delivery never throws either way, so a rejected event cannot turn into an application error.
+
+Browser events are rejected the same way when the page origin is not on the project's allowed origins. That is why the same client ID can work in production and be refused from `localhost`.
 
 ## Method mapping
 

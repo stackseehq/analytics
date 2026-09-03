@@ -5,6 +5,11 @@ import {
 	buildIdentifyPayload,
 	buildTrackedEventProperties,
 } from "@/providers/openpanel/shared.js";
+import {
+	createDeliveryFailureReporter,
+	instrumentOpenPanelDelivery,
+} from "@/providers/openpanel/transport.js";
+import type { OpenPanelDeliveryFailureHandler } from "@/providers/openpanel/transport.js";
 import { isBrowser } from "@/utils/environment.js";
 import type {
 	OpenPanel as OpenPanelWebClient,
@@ -23,7 +28,18 @@ export type OpenPanelClientConfig = Omit<
 	clientId: string;
 	debug?: boolean;
 	enabled?: boolean;
+	/**
+	 * Called when OpenPanel rejects an event. Without a handler the failure is
+	 * logged, because the OpenPanel SDK drops rejected requests silently.
+	 */
+	onDeliveryFailure?: OpenPanelDeliveryFailureHandler;
 };
+
+export type {
+	OpenPanelDeliveryFailure,
+	OpenPanelDeliveryFailureHandler,
+	OpenPanelDeliveryFailureReason,
+} from "@/providers/openpanel/transport.js";
 
 export class OpenPanelClientProvider extends BaseAnalyticsProvider {
 	name = "OpenPanel-Client";
@@ -75,6 +91,7 @@ export class OpenPanelClientProvider extends BaseAnalyticsProvider {
 				enabled,
 				clientSecret,
 				disabled,
+				onDeliveryFailure,
 				sdk,
 				sdkVersion,
 				waitForProfile,
@@ -94,6 +111,13 @@ export class OpenPanelClientProvider extends BaseAnalyticsProvider {
 				...options,
 				debug: this.config.debug ?? false,
 			});
+			const instrumented = instrumentOpenPanelDelivery(
+				this.client,
+				createDeliveryFailureReporter(this.name, onDeliveryFailure),
+			);
+			if (!instrumented) {
+				this.log("Delivery reporting unavailable - unrecognized transport");
+			}
 			// The web override replaces a caller-supplied __path with its last screen view.
 			this.trackEvent = OpenPanelBase.prototype.track.bind(this.client);
 			this.initialized = true;

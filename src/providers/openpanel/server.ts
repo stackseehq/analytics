@@ -5,6 +5,11 @@ import {
 	buildIdentifyPayload,
 	buildTrackedEventProperties,
 } from "@/providers/openpanel/shared.js";
+import {
+	createDeliveryFailureReporter,
+	instrumentOpenPanelDelivery,
+} from "@/providers/openpanel/transport.js";
+import type { OpenPanelDeliveryFailureHandler } from "@/providers/openpanel/transport.js";
 import type { OpenPanel, OpenPanelOptions } from "@openpanel/sdk";
 
 const isMissingPackageError = (
@@ -37,7 +42,18 @@ export interface OpenPanelServerConfig {
 	filter?: OpenPanelOptions["filter"];
 	debug?: boolean;
 	enabled?: boolean;
+	/**
+	 * Called when OpenPanel rejects an event. Without a handler the failure is
+	 * logged, because the OpenPanel SDK drops rejected requests silently.
+	 */
+	onDeliveryFailure?: OpenPanelDeliveryFailureHandler;
 }
+
+export type {
+	OpenPanelDeliveryFailure,
+	OpenPanelDeliveryFailureHandler,
+	OpenPanelDeliveryFailureReason,
+} from "@/providers/openpanel/transport.js";
 
 export class OpenPanelServerProvider extends BaseAnalyticsProvider {
 	name = "OpenPanel-Server";
@@ -88,12 +104,25 @@ export class OpenPanelServerProvider extends BaseAnalyticsProvider {
 			throw error;
 		}
 
-		const { enabled, ...options } = this.config;
+		const { enabled, onDeliveryFailure, ...options } = this.config;
 		void enabled;
 
 		this.client = new OpenPanelClient(options);
+		this.reportDeliveryFailures(onDeliveryFailure);
 		this.initialized = true;
 		this.log("Initialized successfully");
+	}
+
+	private reportDeliveryFailures(
+		onDeliveryFailure: OpenPanelDeliveryFailureHandler | undefined,
+	): void {
+		const instrumented = instrumentOpenPanelDelivery(
+			this.client,
+			createDeliveryFailureReporter(this.name, onDeliveryFailure),
+		);
+		if (!instrumented) {
+			this.log("Delivery reporting unavailable - unrecognized transport");
+		}
 	}
 
 	async identify(

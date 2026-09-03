@@ -152,6 +152,25 @@ export async function createEmitKitAnalytics() {
 
 For request-scoped ownership, create a fresh provider and analytics pair and shut down that same pair in `finally`. For a reusable instance, call `shutdown()` only at application or process teardown. EmitKit sends immediately rather than buffering; its shutdown clears the provider's client state.
 
+### OpenPanel
+
+`OpenPanelClientProvider({ clientId })` in the browser and `OpenPanelServerProvider({ clientId, clientSecret })` on the server. The client ID is browser-public; the client secret is server-only.
+
+```ts
+import { OpenPanelServerProvider } from "trakoo/providers/server";
+
+new OpenPanelServerProvider({
+	clientId: process.env.OPENPANEL_CLIENT_ID!,
+	clientSecret: process.env.OPENPANEL_CLIENT_SECRET!,
+	onDeliveryFailure: (failure) =>
+		logger.warn("openpanel_delivery_failed", failure.reason, failure.status),
+});
+```
+
+OpenPanel's SDKs drop events rejected with HTTP 401 without throwing, retrying or logging, so a wrong key, a rotated secret or a browser origin the project does not allow stops analytics silently. `onDeliveryFailure` reports those rejections; without a handler trakoo logs them. It carries the envelope type, status and ingestion URL, never event properties. Delivery never throws, so a rejected event never becomes an application error.
+
+Browser events are rejected with the same 401 when the page origin is not on the project's allowed origins, so a client ID that works in production can be refused from `localhost`.
+
 ### Pirsch
 
 No extra package is required. The current client constructor is `PirschClientProvider({ identificationCode, hostname? })`:
