@@ -8,6 +8,11 @@ export type { PostHogOptions } from "posthog-node";
 // OpenPanel server provider
 export { OpenPanelServerProvider } from "./openpanel/server.js";
 export type { OpenPanelServerConfig } from "./openpanel/server.js";
+export type {
+	OpenPanelDeliveryFailure,
+	OpenPanelDeliveryFailureHandler,
+	OpenPanelDeliveryFailureReason,
+} from "./openpanel/transport.js";
 
 // Bento server provider
 export { BentoServerProvider } from "./bento/server.js";

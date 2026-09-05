@@ -11,6 +11,11 @@ export type { PostHogConfig } from "posthog-js";
 // OpenPanel client provider
 export { OpenPanelClientProvider } from "./openpanel/client.js";
 export type { OpenPanelClientConfig } from "./openpanel/client.js";
+export type {
+	OpenPanelDeliveryFailure,
+	OpenPanelDeliveryFailureHandler,
+	OpenPanelDeliveryFailureReason,
+} from "./openpanel/transport.js";
 
 // Bento client provider
 export { BentoClientProvider } from "./bento/client.js";
